@@ -562,6 +562,19 @@ document.getElementById('reset-priorities')?.addEventListener('click', () => {
 
 
 // ===== Place search (Nominatim) =====
+
+// Strips conversational filler ("on the map", "please", trailing "?") from
+// a chat-typed place query before geocoding - Nominatim matches "Malaysia"
+// fine, but not "malaysia on the map".
+function cleanPlaceQuery(q) {
+  return (q || '')
+    .replace(/\bon\s+(the\s+)?(map|earth|globe)\b/gi, '')
+    .replace(/\b(please|thanks?|now)\b/gi, '')
+    .replace(/[?.!]+\s*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 async function searchPlace(query) {
   if (!query || !query.trim()) return null;
   // polygon_geojson=1 gets the real boundary shape (not just a bounding
@@ -684,7 +697,7 @@ async function handleChatCommand(raw) {
 
   // Place search / go to
   if (text.startsWith('go to ') || text.startsWith('search ') || text.startsWith('find ') || text.startsWith('show map of ')) {
-    const q = text.replace(/^(go to|search|find|show map of)\s+/i, '');
+    const q = cleanPlaceQuery(text.replace(/^(go to|search|find|show map of)\s+/i, ''));
     addChatMsg(`Searching for <strong>${q}</strong>…`);
     const result = await searchPlace(q);
     if (result) {
@@ -800,30 +813,54 @@ async function handleChatCommand(raw) {
 
 // ===== AGROINTEL AI (real, Gemini-backed, grounded in real NASA data) =====
 const AGROINTEL_API_BASE = 'https://agrointel-ai-api.vercel.app';
-const AGROINTEL_LOCATION_LABEL = 'Central Iowa, USA (Ames area)';
+const AGROINTEL_LOCATION_LABEL = 'Central Iowa, USA (Ames area)'; // default/fallback only
 
-// Indicators only depend on the farm's fixed location, so fetch them once
-// and reuse for every question instead of re-fetching on each message.
-let agrointelIndicatorsPromise = null;
+// Indicators depend on whatever place is actually focused on the map right
+// now (the last search/"go to" result), not a fixed location - cached per
+// location (rounded lat/lon) so re-asking about the same place is instant,
+// but a new place always gets its own real fetch instead of reusing Iowa's.
+const agrointelIndicatorsCache = new Map(); // "lat,lon" -> promise<indicators>
 
-function getAgrointelIndicators() {
-  if (!agrointelIndicatorsPromise) {
-    agrointelIndicatorsPromise = fetch(`${AGROINTEL_API_BASE}/indicators`, {
+// Whatever place is currently focused on the map: the last search/"go to"
+// result if there is one, otherwise the default sample farm. This is what
+// keeps the chat's answers in sync with what the map is actually showing.
+function currentAgrointelLocation() {
+  if (siLastLocation && typeof siLastLocation.lat === 'number' && typeof siLastLocation.lon === 'number') {
+    return { lat: siLastLocation.lat, lon: siLastLocation.lon, label: siLastLocation.name || AGROINTEL_LOCATION_LABEL };
+  }
+  return { lat: FARM_LAT, lon: FARM_LON, label: AGROINTEL_LOCATION_LABEL };
+}
+
+function getAgrointelIndicators(loc) {
+  const key = `${loc.lat.toFixed(3)},${loc.lon.toFixed(3)}`;
+  if (!agrointelIndicatorsCache.has(key)) {
+    const promise = fetch(`${AGROINTEL_API_BASE}/indicators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // SMAP soil-moisture lookups can take 60s+ for some locations and
       // time out client-side, so this skips it and relies on POWER-only
       // indicators (temp/rainfall anomalies, dry spells) which respond in ~1s.
-      body: JSON.stringify({ lat: FARM_LAT, lon: FARM_LON, include_soil_moisture: false })
+      body: JSON.stringify({ lat: loc.lat, lon: loc.lon, include_soil_moisture: false })
     }).then(res => {
       if (!res.ok) throw new Error(`indicators HTTP ${res.status}`);
       return res.json();
     }).catch(err => {
-      agrointelIndicatorsPromise = null; // allow retry on next question
+      agrointelIndicatorsCache.delete(key); // allow retry on next question
       throw err;
     });
+    agrointelIndicatorsCache.set(key, promise);
   }
-  return agrointelIndicatorsPromise;
+  return agrointelIndicatorsCache.get(key);
+}
+
+// Light-touch detection of a place named inside a free-form question, e.g.
+// "what should I plant in Kenya?" -> "Kenya". Only matches a capitalized
+// phrase right after in/for/at/near, so ordinary lowercase words ("is this
+// AI trustworthy?") never false-match. Lets a question move the map to the
+// place it's actually about, instead of only responding to "go to X".
+function extractPlaceMention(raw) {
+  const match = (raw || '').match(/\b(?:in|for|at|near)\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\s*[?.,!]?\s*$/);
+  return match ? match[1].trim() : null;
 }
 
 // Turns the AI's plain-text answer (markdown-ish: **bold**, "- " bullets,
@@ -870,6 +907,19 @@ function formatAiAnswer(text) {
 }
 
 async function askAgrointelAi(question) {
+  // If the question names a place ("...in Kenya?"), show that place on the
+  // map first - the user sees where the AI is talking about while it answers,
+  // instead of the map silently staying wherever it was.
+  const mention = extractPlaceMention(question);
+  if (mention) {
+    const result = await searchPlace(mention);
+    if (result) {
+      siFocusOnSearchResult(result);
+      addChatMsg(`Showing <strong>${result.name}</strong> on the map…`);
+      updateSuitabilityForLocation(result); // sets siLastLocation + heatmap + recommendation marker
+    }
+  }
+
   const thinking = document.createElement('div');
   thinking.className = 'chat-msg bot';
   thinking.textContent = 'Thinking…';
@@ -877,13 +927,14 @@ async function askAgrointelAi(question) {
   thinking.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
   try {
-    const indicators = await getAgrointelIndicators();
+    const loc = currentAgrointelLocation();
+    const indicators = await getAgrointelIndicators(loc);
     const chatRes = await fetch(`${AGROINTEL_API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         question,
-        location_label: AGROINTEL_LOCATION_LABEL,
+        location_label: loc.label,
         indicators
       })
     });
@@ -931,8 +982,69 @@ const SI_SUITABILITY_COLORS = ['#c0392b', '#e67e22', '#f1c40f', '#8bc34a', '#2e7
 
 let siGridLayer = L.layerGroup().addTo(map);
 let siBoundaryLayer = L.layerGroup().addTo(map);
+let siLocationMarkerLayer = L.layerGroup().addTo(map);
 let siGridCache = null; // { key, cells: [{lat, lon, south, north, west, east, erosion, water, suitability}] }
 const siLocationCache = new Map(); // boundingBoxKey -> cells
+const siRecommendationCache = new Map(); // "lat,lon" -> {indicators, comparisons}
+
+// Real per-search recommendation marker: for whatever country/region/city
+// the user just searched, fetch real /indicators + /score for that point
+// and drop one marker there with the actual top-ranked rotation strategy -
+// the same style as the sample farm's hand-written field markers, but
+// generated from real data for any place, not just the 3 fixed Iowa points.
+async function siShowLocationRecommendation(loc) {
+  siLocationMarkerLayer.clearLayers();
+  if (typeof loc.lat !== 'number' || typeof loc.lon !== 'number') return;
+
+  const key = `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)}`;
+  try {
+    let data = siRecommendationCache.get(key);
+    if (!data) {
+      const indicators = await getAgrointelIndicators({ lat: loc.lat, lon: loc.lon });
+      const scoreRes = await fetch(`${AGROINTEL_API_BASE}/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ indicators })
+      });
+      if (!scoreRes.ok) throw new Error(`score HTTP ${scoreRes.status}`);
+      const scoreData = await scoreRes.json();
+      data = { indicators, comparisons: scoreData.comparisons || [] };
+      siRecommendationCache.set(key, data);
+    }
+
+    const top = data.comparisons[0];
+    if (!top) return;
+
+    const ind = data.indicators;
+    const notes = [`${ind.longest_dry_spell_days}-day dry spell`];
+    notes.push(`${ind.temp_anomaly_mean_c >= 0 ? '+' : ''}${ind.temp_anomaly_mean_c.toFixed(1)}°C temp anomaly`);
+    if (ind.rainfall_anomaly_pct != null) {
+      notes.push(`${Math.abs(ind.rainfall_anomaly_pct).toFixed(0)}% ${ind.rainfall_anomaly_pct >= 0 ? 'wetter' : 'drier'} than normal`);
+    }
+
+    // A real L.marker (not circleMarker) so it renders in Leaflet's
+    // markerPane, above the SI heatmap's invisible per-cell inspection
+    // circleMarkers - otherwise those silently swallow clicks meant for
+    // this recommendation pin since they'd sit at nearly the same point.
+    const icon = L.divIcon({
+      className: 'si-recommendation-pin',
+      html: '<div class="si-recommendation-pin-dot"></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11]
+    });
+    const marker = L.marker([loc.lat, loc.lon], { icon, zIndexOffset: 1000 }).addTo(siLocationMarkerLayer);
+
+    marker.bindPopup(`
+      <strong style="font-size:1.05em">${loc.name || 'Searched location'}</strong><br>
+      Best-fit rotation strategy (real data): <strong>${top.label}</strong><br>
+      Overall suitability score: <strong>${top.overall_score.toFixed(1)}/100</strong><br>
+      <small style="color:#666">Real NASA conditions: ${notes.join(', ')}.</small><br>
+      <small style="color:#888">Decision support only - ask the chat for the full breakdown, or consult a local agronomist.</small>
+    `);
+  } catch (err) {
+    console.error('Location recommendation failed', loc.lat, loc.lon, err);
+  }
+}
 
 function siBoundingBoxFor() {
   // Sample the map's actual current viewport, not just a box around the
@@ -1236,6 +1348,7 @@ let siLastLocation = null;
 
 async function updateSuitabilityForLocation(loc) {
   siLastLocation = loc;
+  siShowLocationRecommendation(loc); // real marker+popup, independent of the heatmap toggle below
   const status = document.getElementById('si-status');
   const toggle = document.getElementById('si-toggle');
 

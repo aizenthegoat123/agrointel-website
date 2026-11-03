@@ -831,6 +831,15 @@ footer .small {
   margin-bottom: 0.1rem;
 }
 
+.si-recommendation-pin-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #1e8449;
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
 .si-legend-provenance {
   font-size: 0.72rem;
   color: var(--text-muted);
