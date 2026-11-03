@@ -41,6 +41,11 @@ function createGibsLayer(layerName, dateStr, format = 'jpg') {
     tileSize: 256,
     subdomains: 'abc',
     maxZoom: 9,
+    // Single-day MODIS/VIIRS imagery has real satellite-orbit swath gaps
+    // (visible as black "teeth") that show up once the view is wide enough
+    // to see them. Below this zoom, the complete Esri satellite basemap
+    // shows through instead rather than a broken-looking overlay.
+    minZoom: 5,
     opacity: 0.75,
     noWrap: false,
     bounds: [
