@@ -99,7 +99,12 @@ document.getElementById('base-layer')?.addEventListener('change', (e) => {
   if (currentGibs) currentGibs.bringToFront();
 });
 
-document.getElementById('update-layer').addEventListener('click', updateGibsLayer);
+// NASA Layer and Date apply immediately on change - no separate Update
+// step needed (opacity already worked this way via the 'input' listener
+// below; this makes the other two controls consistent with it).
+document.getElementById('gibs-layer')?.addEventListener('change', updateGibsLayer);
+document.getElementById('gibs-date')?.addEventListener('change', updateGibsLayer);
+
 document.getElementById('locate-farm').addEventListener('click', () => {
   map.setView([FARM_LAT, FARM_LON], 12);
 });
