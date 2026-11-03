@@ -197,17 +197,20 @@
             <span><span class="dot corn"></span> Corn Field</span>
             <span><span class="dot soy"></span> Soy Field</span>
             <span><span class="dot cover"></span> Diversification Area</span>
-            <span><span class="dot erosion"></span> Erosion risk</span>
-            <span><span class="dot waterstress"></span> Water-stress hotspot</span>
-            <span><span class="dot frost"></span> Frost-prone</span>
           </div>
         </div>
         <div class="map-side">
-          <h3><i class="fas fa-layer-group"></i> Vulnerability Overlays</h3>
-          <p class="side-hint">Toggle zones that highlight field-level risks (illustrative for this sample area).</p>
-          <label class="check-label"><input type="checkbox" id="overlay-erosion" checked> Erosion risk zones</label>
-          <label class="check-label"><input type="checkbox" id="overlay-water" checked> Water-stress hotspots</label>
-          <label class="check-label"><input type="checkbox" id="overlay-frost"> Frost-prone areas</label>
+          <h3><i class="fas fa-layer-group"></i> Suitability Model</h3>
+          <p class="side-hint">A real, NASA-data-driven grid computed for the area currently shown — not illustrative. Switch models to see different real conditions.</p>
+          <label>Map Model:
+            <select id="si-model-select">
+              <option value="erosion">Erosion Risk</option>
+              <option value="water">Water Stress</option>
+              <option value="suitability">Overall Suitability</option>
+            </select>
+          </label>
+          <div id="si-status" class="si-status"></div>
+          <div id="si-legend" class="si-legend"></div>
 
           <h3 style="margin-top:1.25rem"><i class="fas fa-clock"></i> Timeline (season)</h3>
           <p class="side-hint">Slide to approximate seasonal conditions for the sample farm.</p>

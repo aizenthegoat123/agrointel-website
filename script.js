@@ -160,45 +160,11 @@ fields.forEach(f => {
 });
 
 
-// ===== Vulnerability overlays (illustrative field-level zones) =====
-const erosionZones = L.layerGroup([
-  L.polygon([
-    [42.048, -93.655], [42.048, -93.640], [42.038, -93.640], [42.038, -93.655]
-  ], { color: '#c0392b', weight: 2, fillColor: '#c0392b', fillOpacity: 0.25 }),
-  L.polygon([
-    [42.025, -93.625], [42.025, -93.612], [42.015, -93.612], [42.015, -93.625]
-  ], { color: '#c0392b', weight: 2, fillColor: '#c0392b', fillOpacity: 0.2 })
-]);
-
-const waterStressZones = L.layerGroup([
-  L.circle([42.041, -93.645], { radius: 450, color: '#2980b9', weight: 2, fillColor: '#2980b9', fillOpacity: 0.22 }),
-  L.circle([42.018, -93.618], { radius: 380, color: '#2980b9', weight: 2, fillColor: '#2980b9', fillOpacity: 0.2 })
-]);
-
-const frostZones = L.layerGroup([
-  L.polygon([
-    [42.055, -93.660], [42.055, -93.630], [42.050, -93.630], [42.050, -93.660]
-  ], { color: '#8e44ad', weight: 2, fillColor: '#8e44ad', fillOpacity: 0.2 })
-]);
-
-// Bind popups to zones
-erosionZones.eachLayer(l => l.bindPopup('<strong>Erosion risk zone</strong><br>Steeper or bare areas after harvest. Living cover and residue help.'));
-waterStressZones.eachLayer(l => l.bindPopup('<strong>Water-stress hotspot</strong><br>Faster soil-moisture drawdown in dry spells. Deeper roots / cover can buffer.'));
-frostZones.eachLayer(l => l.bindPopup('<strong>Frost-prone area</strong><br>Low-lying or cooler microclimate. Watch spring/fall planting windows.'));
-
-// Default: show erosion + water stress
-erosionZones.addTo(map);
-waterStressZones.addTo(map);
-
-document.getElementById('overlay-erosion')?.addEventListener('change', (e) => {
-  if (e.target.checked) erosionZones.addTo(map); else map.removeLayer(erosionZones);
-});
-document.getElementById('overlay-water')?.addEventListener('change', (e) => {
-  if (e.target.checked) waterStressZones.addTo(map); else map.removeLayer(waterStressZones);
-});
-document.getElementById('overlay-frost')?.addEventListener('change', (e) => {
-  if (e.target.checked) frostZones.addTo(map); else map.removeLayer(frostZones);
-});
+// ===== Real Suitability Index grid (replaces the old illustrative zones) =====
+// See the dedicated "Suitability Index" block further down for the
+// implementation (grid sampling, real /indicators + /score fetches,
+// classification, and rendering). It's wired up after FARM_LAT/FARM_LON
+// and the AGROINTEL AI constants are defined.
 
 // ===== Season timeline =====
 const seasonNotes = [
@@ -593,10 +559,13 @@ async function searchPlace(query) {
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     const data = await res.json();
     if (data && data[0]) {
+      // boundingbox is [south, north, west, east] as strings
+      const bb = data[0].boundingbox ? data[0].boundingbox.map(Number) : null;
       return {
         lat: parseFloat(data[0].lat),
         lon: parseFloat(data[0].lon),
-        name: data[0].display_name
+        name: data[0].display_name,
+        boundingBox: bb ? { south: bb[0], north: bb[1], west: bb[2], east: bb[3] } : null
       };
     }
   } catch (e) {
@@ -611,6 +580,7 @@ document.getElementById('search-place-btn')?.addEventListener('click', async () 
   if (result) {
     map.setView([result.lat, result.lon], 11);
     L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
+    updateSuitabilityForLocation(result);
   } else {
     alert('Place not found. Try a city or country name.');
   }
@@ -669,16 +639,11 @@ function setGibsLayerByKeyword(keyword) {
   return false;
 }
 
-function toggleOverlay(name, on) {
-  const ids = {
-    erosion: 'overlay-erosion',
-    water: 'overlay-water',
-    frost: 'overlay-frost'
-  };
-  const el = document.getElementById(ids[name]);
-  if (!el) return false;
-  el.checked = on !== undefined ? on : !el.checked;
-  el.dispatchEvent(new Event('change'));
+function setSuitabilityModel(model) {
+  const select = document.getElementById('si-model-select');
+  if (!select) return false;
+  select.value = model;
+  select.dispatchEvent(new Event('change'));
   return true;
 }
 
@@ -697,6 +662,7 @@ async function handleChatCommand(raw) {
       const searchInput = document.getElementById('place-search');
       if (searchInput) searchInput.value = q;
       addChatMsg(`Centered map on <strong>${result.name}</strong>.`);
+      updateSuitabilityForLocation(result);
     } else {
       addChatMsg('Sorry, I could not find that place. Try a city or country name.');
     }
@@ -745,27 +711,20 @@ async function handleChatCommand(raw) {
     return;
   }
 
-  // Overlays
+  // Suitability Index model switching (real data, not illustrative)
   if (isNavPhrase && text.includes('erosion')) {
-    toggleOverlay('erosion', true);
-    addChatMsg('Turned <strong>erosion risk</strong> overlay ON. Red zones mark higher risk areas on the sample farm.');
+    setSuitabilityModel('erosion');
+    addChatMsg('Switched the map to the real <strong>Erosion Risk</strong> model, computed from real rainfall data for the area shown.');
     return;
   }
   if (isNavPhrase && (text.includes('water stress') || text.includes('water-stress') || text.includes('drought'))) {
-    toggleOverlay('water', true);
-    addChatMsg('Turned <strong>water-stress hotspots</strong> ON (blue circles).');
+    setSuitabilityModel('water');
+    addChatMsg('Switched the map to the real <strong>Water Stress</strong> model, computed from real dry-spell and temperature data.');
     return;
   }
-  if (isNavPhrase && text.includes('frost')) {
-    toggleOverlay('frost', true);
-    addChatMsg('Turned <strong>frost-prone</strong> overlay ON (purple).');
-    return;
-  }
-  if (isNavPhrase && (text.includes('hide overlays') || text.includes('clear overlays'))) {
-    toggleOverlay('erosion', false);
-    toggleOverlay('water', false);
-    toggleOverlay('frost', false);
-    addChatMsg('All vulnerability overlays turned off.');
+  if (isNavPhrase && (text.includes('suitability') || text.includes('overall score'))) {
+    setSuitabilityModel('suitability');
+    addChatMsg('Switched the map to the real <strong>Overall Suitability</strong> model (best rotation strategy score per area).');
     return;
   }
 
@@ -796,7 +755,7 @@ async function handleChatCommand(raw) {
     addChatMsg(`I can control this page. Try:<br>
       • <em>go to [place]</em> — e.g. "go to Nebraska"<br>
       • <em>show NDVI</em> / <em>show temperature</em> / <em>true color</em><br>
-      • <em>show erosion</em> / <em>water stress</em> / <em>frost</em><br>
+      • <em>show erosion</em> / <em>water stress</em> / <em>suitability</em> (real Suitability Index models)<br>
       • <em>center farm</em><br>
       • <em>rotations</em> / <em>priorities</em> / <em>climate</em><br>
       Ask about crop rotations or soil health too.`);
@@ -921,3 +880,189 @@ document.getElementById('chat-send')?.addEventListener('click', sendChat);
 chatInput?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') sendChat();
 });
+
+// ===== Suitability Index grid (real, per-searched-location) =====
+// Replaces the old hardcoded illustrative zones. Whenever the map's
+// location changes (initial farm load, or a successful place search),
+// this samples a small grid of real points inside that area via our own
+// AGROINTEL AI API, derives 3 real "models" from the fetched indicators,
+// and paints the grid as colored cells — switchable instantly client-side
+// since all models reuse the same fetched data. Never precomputed for
+// anywhere the user hasn't actually looked at.
+
+const SI_LEGEND_CLASSES = ['Very Low', 'Low', 'Moderate', 'High', 'Very High'];
+
+// Risk models (erosion, water) use red=high risk; the suitability model
+// uses the same 5-step ramp but green=high suitability, since a "high
+// suitability" reading is good news, not a warning.
+const SI_RISK_COLORS = ['#2e7d32', '#8bc34a', '#f1c40f', '#e67e22', '#c0392b'];
+const SI_SUITABILITY_COLORS = ['#c0392b', '#e67e22', '#f1c40f', '#8bc34a', '#2e7d32'];
+
+let siGridLayer = L.layerGroup().addTo(map);
+let siGridCache = null; // { key, cells: [{lat, lon, south, north, west, east, erosion, water, suitability}] }
+const siLocationCache = new Map(); // boundingBoxKey -> cells
+
+function siBoundingBoxFor(loc) {
+  if (loc.boundingBox) {
+    const { south, north, west, east } = loc.boundingBox;
+    // Cap how large a box we'll grid-sample so a whole continent doesn't
+    // turn into a handful of near-meaningless giant cells; clamp to a
+    // reasonable country/region-sized window centered on the place.
+    const maxSpan = 6; // degrees
+    const latSpan = Math.min(north - south, maxSpan) || 1;
+    const lonSpan = Math.min(east - west, maxSpan) || 1;
+    const cLat = (north + south) / 2;
+    const cLon = (east + west) / 2;
+    return { south: cLat - latSpan / 2, north: cLat + latSpan / 2, west: cLon - lonSpan / 2, east: cLon + lonSpan / 2 };
+  }
+  // Bare point (e.g. default farm): small fixed box around it.
+  return { south: loc.lat - 0.6, north: loc.lat + 0.6, west: loc.lon - 0.6, east: loc.lon + 0.6 };
+}
+
+function siBuildGrid(box, maxPoints = 16) {
+  const cols = Math.max(2, Math.min(6, Math.round(Math.sqrt(maxPoints))));
+  const rows = cols;
+  const latStep = (box.north - box.south) / rows;
+  const lonStep = (box.east - box.west) / cols;
+  const cells = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const south = box.south + r * latStep;
+      const north = south + latStep;
+      const west = box.west + c * lonStep;
+      const east = west + lonStep;
+      cells.push({ lat: (south + north) / 2, lon: (west + east) / 2, south, north, west, east });
+    }
+  }
+  return cells;
+}
+
+async function siFetchCell(cell) {
+  try {
+    const indicatorsRes = await fetch(`${AGROINTEL_API_BASE}/indicators`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: cell.lat, lon: cell.lon, include_soil_moisture: false })
+    });
+    if (!indicatorsRes.ok) throw new Error(`indicators HTTP ${indicatorsRes.status}`);
+    const indicators = await indicatorsRes.json();
+
+    const scoreRes = await fetch(`${AGROINTEL_API_BASE}/score`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ indicators })
+    });
+    let topScore = null;
+    if (scoreRes.ok) {
+      const scoreData = await scoreRes.json();
+      const scores = (scoreData.comparisons || []).map(c => c.overall_score).filter(v => typeof v === 'number');
+      if (scores.length) topScore = Math.max(...scores);
+    }
+
+    return {
+      ...cell,
+      tempAnomaly: indicators.temp_anomaly_mean_c,
+      extremeRainDays: indicators.extreme_rainfall_days,
+      drySpellDays: indicators.longest_dry_spell_days,
+      suitabilityScore: topScore
+    };
+  } catch (err) {
+    console.error('SI cell fetch failed', cell.lat, cell.lon, err);
+    return { ...cell, failed: true };
+  }
+}
+
+function siClassify(values, value) {
+  // Quantile thresholds over this grid's own real values, so "High"/"Low"
+  // is always relative to the area actually being looked at.
+  const sorted = [...values].sort((a, b) => a - b);
+  const q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+  const thresholds = [q(0.2), q(0.4), q(0.6), q(0.8)];
+  let idx = thresholds.findIndex(t => value <= t);
+  return idx === -1 ? 4 : idx;
+}
+
+function siModelValue(cell, model) {
+  if (model === 'erosion') return cell.extremeRainDays ?? 0;
+  if (model === 'water') return (cell.drySpellDays ?? 0) + Math.max(0, cell.tempAnomaly ?? 0) * 2;
+  return cell.suitabilityScore ?? 0; // 'suitability'
+}
+
+function siRenderLegend(model) {
+  const legend = document.getElementById('si-legend');
+  if (!legend) return;
+  const colors = model === 'suitability' ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
+  const title = model === 'erosion' ? 'Erosion Risk (real)'
+    : model === 'water' ? 'Water Stress (real)'
+    : 'Overall Suitability (real)';
+  legend.innerHTML = `<div class="si-legend-title">${title}</div>` +
+    SI_LEGEND_CLASSES.map((label, i) => `
+      <div class="si-legend-row"><span class="si-legend-swatch" style="background:${colors[i]}"></span>${label}</div>
+    `).join('');
+}
+
+function siRenderGrid(cells, model) {
+  siGridLayer.clearLayers();
+  const valid = cells.filter(c => !c.failed);
+  if (!valid.length) return;
+  const values = valid.map(c => siModelValue(c, model));
+  const colors = model === 'suitability' ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
+
+  valid.forEach(cell => {
+    const value = siModelValue(cell, model);
+    const classIdx = siClassify(values, value);
+    const color = colors[classIdx];
+    const rect = L.rectangle(
+      [[cell.south, cell.west], [cell.north, cell.east]],
+      { color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.6 }
+    );
+    const label = SI_LEGEND_CLASSES[classIdx];
+    rect.bindPopup(`
+      <strong>${label}</strong><br>
+      Temp anomaly: ${cell.tempAnomaly?.toFixed(2) ?? '—'}°C<br>
+      Extreme rainfall days: ${cell.extremeRainDays ?? '—'}<br>
+      Longest dry spell: ${cell.drySpellDays ?? '—'} days<br>
+      Best-strategy score: ${cell.suitabilityScore != null ? cell.suitabilityScore.toFixed(1) + '/100' : '—'}
+    `);
+    rect.addTo(siGridLayer);
+  });
+
+  siRenderLegend(model);
+}
+
+async function updateSuitabilityForLocation(loc) {
+  const status = document.getElementById('si-status');
+  const box = siBoundingBoxFor(loc);
+  const cacheKey = [box.south, box.north, box.west, box.east].map(v => v.toFixed(2)).join(',');
+
+  if (siLocationCache.has(cacheKey)) {
+    siGridCache = { key: cacheKey, cells: siLocationCache.get(cacheKey) };
+    const model = document.getElementById('si-model-select')?.value || 'erosion';
+    siRenderGrid(siGridCache.cells, model);
+    if (status) status.textContent = `Showing real data for ${loc.name || 'this area'} (cached).`;
+    return;
+  }
+
+  if (status) status.textContent = `Computing real data for ${loc.name || 'this area'}…`;
+  const grid = siBuildGrid(box);
+  const results = await Promise.all(grid.map(siFetchCell));
+  siLocationCache.set(cacheKey, results);
+  siGridCache = { key: cacheKey, cells: results };
+
+  const failedCount = results.filter(c => c.failed).length;
+  if (status) {
+    status.textContent = failedCount
+      ? `Real data for ${loc.name || 'this area'} (${failedCount} of ${results.length} points unavailable).`
+      : `Real data for ${loc.name || 'this area'} — ${results.length} points.`;
+  }
+
+  const model = document.getElementById('si-model-select')?.value || 'erosion';
+  siRenderGrid(results, model);
+}
+
+document.getElementById('si-model-select')?.addEventListener('change', (e) => {
+  if (siGridCache) siRenderGrid(siGridCache.cells, e.target.value);
+});
+
+// Initial grid for the default sample farm.
+updateSuitabilityForLocation({ lat: FARM_LAT, lon: FARM_LON, name: AGROINTEL_LOCATION_LABEL, boundingBox: null });

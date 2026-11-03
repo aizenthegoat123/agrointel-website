@@ -799,6 +799,53 @@ footer .small {
 .dot.waterstress { background: #2980b9; }
 .dot.frost { background: #8e44ad; }
 
+/* ===== Suitability Index model control ===== */
+.map-side select {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid #ccd8cf;
+  font-family: var(--font);
+  font-size: 0.9rem;
+  margin-top: 0.3rem;
+}
+
+.si-status {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  min-height: 1.1rem;
+}
+
+.si-legend {
+  margin-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.si-legend-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--green-900);
+  margin-bottom: 0.1rem;
+}
+
+.si-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.si-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
 /* Trends panel */
 .trends-panel {
   margin-top: 1.75rem;
