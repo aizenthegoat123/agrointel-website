@@ -559,7 +559,11 @@ document.getElementById('reset-priorities')?.addEventListener('click', () => {
 // ===== Place search (Nominatim) =====
 async function searchPlace(query) {
   if (!query || !query.trim()) return null;
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+  // polygon_geojson=1 gets the real boundary shape (not just a bounding
+  // box) so the SI heatmap can be clipped to real territory instead of a
+  // rectangle; polygon_threshold simplifies it so a detailed coastline
+  // doesn't become a huge, slow-to-render geometry.
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&polygon_geojson=1&polygon_threshold=0.01`;
   try {
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     const data = await res.json();
@@ -570,7 +574,8 @@ async function searchPlace(query) {
         lat: parseFloat(data[0].lat),
         lon: parseFloat(data[0].lon),
         name: data[0].display_name,
-        boundingBox: bb ? { south: bb[0], north: bb[1], west: bb[2], east: bb[3] } : null
+        boundingBox: bb ? { south: bb[0], north: bb[1], west: bb[2], east: bb[3] } : null,
+        geometry: data[0].geojson || null
       };
     }
   } catch (e) {
@@ -579,11 +584,27 @@ async function searchPlace(query) {
   return null;
 }
 
+// Fits the map to a search result's real shape (if Nominatim returned
+// boundary geometry) instead of a fixed zoom level, and draws the real
+// outline so the border/coastline shown is accurate, not inferred.
+function siFocusOnSearchResult(result) {
+  siBoundaryLayer.clearLayers();
+  if (result.geometry) {
+    const outline = L.geoJSON(result.geometry, {
+      style: { color: '#ffffff', weight: 2, fill: false, opacity: 0.9 }
+    });
+    outline.addTo(siBoundaryLayer);
+    map.fitBounds(outline.getBounds(), { padding: [20, 20] });
+  } else {
+    map.setView([result.lat, result.lon], 11);
+  }
+}
+
 document.getElementById('search-place-btn')?.addEventListener('click', async () => {
   const q = document.getElementById('place-search')?.value;
   const result = await searchPlace(q);
   if (result) {
-    map.setView([result.lat, result.lon], 11);
+    siFocusOnSearchResult(result);
     L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
     updateSuitabilityForLocation(result);
   } else {
@@ -662,7 +683,7 @@ async function handleChatCommand(raw) {
     addChatMsg(`Searching for <strong>${q}</strong>…`);
     const result = await searchPlace(q);
     if (result) {
-      map.setView([result.lat, result.lon], 11);
+      siFocusOnSearchResult(result);
       L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
       const searchInput = document.getElementById('place-search');
       if (searchInput) searchInput.value = q;
@@ -904,6 +925,7 @@ const SI_RISK_COLORS = ['#2e7d32', '#8bc34a', '#f1c40f', '#e67e22', '#c0392b'];
 const SI_SUITABILITY_COLORS = ['#c0392b', '#e67e22', '#f1c40f', '#8bc34a', '#2e7d32'];
 
 let siGridLayer = L.layerGroup().addTo(map);
+let siBoundaryLayer = L.layerGroup().addTo(map);
 let siGridCache = null; // { key, cells: [{lat, lon, south, north, west, east, erosion, water, suitability}] }
 const siLocationCache = new Map(); // boundingBoxKey -> cells
 
@@ -934,6 +956,86 @@ function siBuildGrid(box, maxPoints = 25) {
       cells.push({ lat: (south + north) / 2, lon: (west + east) / 2, south, north, west, east });
     }
   }
+  return cells;
+}
+
+// Ray-casting point-in-ring test (GeoJSON ring: array of [lon, lat]).
+function siPointInRing(lat, lon, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const intersects = (yi > lat) !== (yj > lat) &&
+      lon < (xj - xi) * (lat - yi) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+// A GeoJSON Polygon's first ring is its outer boundary; any further rings
+// are holes, so XOR-ing all ring results gives "inside the shape, outside
+// any hole" without needing to know winding direction.
+function siPointInPolygonRings(lat, lon, rings) {
+  let inside = false;
+  for (const ring of rings) {
+    if (siPointInRing(lat, lon, ring)) inside = !inside;
+  }
+  return inside;
+}
+
+// Supports both Polygon and MultiPolygon (e.g. Malaysia's separated
+// Peninsular + Borneo territory) — true if inside any part.
+function siPointInGeometry(lat, lon, geometry) {
+  if (!geometry) return true; // no real shape known (bare point) - keep everything
+  if (geometry.type === 'Polygon') {
+    return siPointInPolygonRings(lat, lon, geometry.coordinates);
+  }
+  if (geometry.type === 'MultiPolygon') {
+    return geometry.coordinates.some(polygonRings => siPointInPolygonRings(lat, lon, polygonRings));
+  }
+  return true;
+}
+
+function siRingBBox(ring) {
+  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
+  ring.forEach(([lon, lat]) => {
+    west = Math.min(west, lon); east = Math.max(east, lon);
+    south = Math.min(south, lat); north = Math.max(north, lat);
+  });
+  return { west, east, south, north };
+}
+
+function siRingArea(bbox) {
+  return (bbox.east - bbox.west) * (bbox.north - bbox.south);
+}
+
+// A country's real shape can be split into separate landmasses (e.g.
+// Malaysia: Peninsular + Borneo). Gridding one box over the whole combined
+// extent wastes almost every sample point on the ocean between them, so
+// instead this grids each part's own bounding box separately and only
+// keeps points that land inside that specific part.
+function siBuildGridForGeometry(geometry, box, pointsPerPart = 25) {
+  if (!geometry) return siBuildGrid(box, pointsPerPart);
+
+  const parts = geometry.type === 'MultiPolygon' ? geometry.coordinates
+    : geometry.type === 'Polygon' ? [geometry.coordinates]
+    : null;
+  if (!parts) return siBuildGrid(box, pointsPerPart);
+
+  // Cap how many separate parts get their own grid, largest first, so a
+  // country simplified down to many small islands doesn't balloon API
+  // calls - the biggest landmasses matter most for a usable map.
+  const ranked = parts
+    .map(rings => ({ rings, bbox: siRingBBox(rings[0]) }))
+    .sort((a, b) => siRingArea(b.bbox) - siRingArea(a.bbox))
+    .slice(0, 4);
+
+  const cells = [];
+  ranked.forEach(({ rings, bbox }) => {
+    const partCells = siBuildGrid(bbox, pointsPerPart)
+      .filter(cell => siPointInPolygonRings(cell.lat, cell.lon, rings));
+    cells.push(...partCells);
+  });
   return cells;
 }
 
@@ -1136,7 +1238,10 @@ async function updateSuitabilityForLocation(loc) {
   }
 
   if (status) status.textContent = `Computing real data for ${loc.name || 'this area'}…`;
-  const grid = siBuildGrid(box);
+  // With a real shape, grid each landmass part separately (not one grid
+  // over the whole combined bbox, which would waste most points on ocean
+  // between e.g. Malaysia's Peninsular and Borneo territory).
+  const grid = siBuildGridForGeometry(loc.geometry, box, 25);
   const results = await Promise.all(grid.map(siFetchCell));
   siLocationCache.set(cacheKey, results);
   siGridCache = { key: cacheKey, cells: results };
