@@ -953,10 +953,19 @@ async function siFetchCell(cell) {
       body: JSON.stringify({ indicators })
     });
     let topScore = null;
+    let topResilience = null;
     if (scoreRes.ok) {
       const scoreData = await scoreRes.json();
-      const scores = (scoreData.comparisons || []).map(c => c.overall_score).filter(v => typeof v === 'number');
+      const comparisons = scoreData.comparisons || [];
+      const scores = comparisons.map(c => c.overall_score).filter(v => typeof v === 'number');
       if (scores.length) topScore = Math.max(...scores);
+      // climate_resilience is one of the two real (non-assumption) scoring
+      // criteria in src/scoring/model.py — the other real one, erosion
+      // reduction, is already represented by the Erosion Risk model above.
+      const resilienceScores = comparisons
+        .map(c => c.criteria_scores?.climate_resilience)
+        .filter(v => typeof v === 'number');
+      if (resilienceScores.length) topResilience = Math.max(...resilienceScores);
     }
 
     return {
@@ -964,7 +973,8 @@ async function siFetchCell(cell) {
       tempAnomaly: indicators.temp_anomaly_mean_c,
       extremeRainDays: indicators.extreme_rainfall_days,
       drySpellDays: indicators.longest_dry_spell_days,
-      suitabilityScore: topScore
+      suitabilityScore: topScore,
+      climateResilience: topResilience
     };
   } catch (err) {
     console.error('SI cell fetch failed', cell.lat, cell.lon, err);
@@ -982,23 +992,63 @@ function siClassify(values, value) {
   return idx === -1 ? 4 : idx;
 }
 
+// Models where a HIGH value is good news (suitability/resilience) get the
+// green-high ramp; everything else is a risk reading (red-high ramp).
+const SI_GOOD_WHEN_HIGH = new Set(['suitability', 'resilience']);
+
 function siModelValue(cell, model) {
   if (model === 'erosion') return cell.extremeRainDays ?? 0;
   if (model === 'water') return (cell.drySpellDays ?? 0) + Math.max(0, cell.tempAnomaly ?? 0) * 2;
+  if (model === 'temp') return cell.tempAnomaly ?? 0;
+  if (model === 'resilience') return cell.climateResilience ?? 0;
   return cell.suitabilityScore ?? 0; // 'suitability'
+}
+
+function siModelTitle(model) {
+  return {
+    erosion: 'Erosion Risk (real)',
+    water: 'Water Stress (real)',
+    temp: 'Temperature Anomaly (real)',
+    resilience: 'Climate Resilience (real)',
+    suitability: 'Overall Suitability (real)'
+  }[model];
 }
 
 function siRenderLegend(model) {
   const legend = document.getElementById('si-legend');
   if (!legend) return;
-  const colors = model === 'suitability' ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
-  const title = model === 'erosion' ? 'Erosion Risk (real)'
-    : model === 'water' ? 'Water Stress (real)'
-    : 'Overall Suitability (real)';
-  legend.innerHTML = `<div class="si-legend-title">${title}</div>` +
+  const colors = SI_GOOD_WHEN_HIGH.has(model) ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
+  legend.innerHTML = `<div class="si-legend-title">${siModelTitle(model)}</div>` +
     SI_LEGEND_CLASSES.map((label, i) => `
       <div class="si-legend-row"><span class="si-legend-swatch" style="background:${colors[i]}"></span>${label}</div>
     `).join('');
+}
+
+// Parses a "#rrggbb" color into {r,g,b} for gradient-stop interpolation.
+function siHexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function siHeatGradient(model) {
+  const colors = SI_GOOD_WHEN_HIGH.has(model) ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
+  const stops = {};
+  colors.forEach((hex, i) => {
+    const { r, g, b } = siHexToRgb(hex);
+    stops[(i / (colors.length - 1)).toFixed(2)] = `rgb(${r},${g},${b})`;
+  });
+  return stops;
+}
+
+// Picks a heat radius/blur (in screen pixels) from the on-screen spacing
+// between adjacent grid points, so sampled points blend into continuous
+// coverage instead of leaving visible gaps — recalculated on zoom change.
+function siHeatSizingFor(cells) {
+  if (cells.length < 2) return { radius: 40, blur: 30 };
+  const p0 = map.latLngToContainerPoint([cells[0].lat, cells[0].lon]);
+  const p1 = map.latLngToContainerPoint([cells[1].lat, cells[1].lon]);
+  const spacing = Math.max(20, Math.hypot(p1.x - p0.x, p1.y - p0.y));
+  return { radius: spacing * 0.9, blur: spacing * 0.7 };
 }
 
 function siRenderGrid(cells, model) {
@@ -1006,28 +1056,57 @@ function siRenderGrid(cells, model) {
   const valid = cells.filter(c => !c.failed);
   if (!valid.length) return;
   const values = valid.map(c => siModelValue(c, model));
-  const colors = model === 'suitability' ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
 
+  const { radius, blur } = siHeatSizingFor(valid);
+  const heatPoints = valid.map(cell => {
+    const value = siModelValue(cell, model);
+    // Normalized 0..1 intensity for a smooth gradient between real sampled
+    // values (interpolated by the heat renderer) — the discrete 5-class
+    // legend below is derived from the same values via quantiles, kept in
+    // sync so what's labeled matches what's painted.
+    const intensity = 0.15 + 0.85 * ((value - min) / span);
+    return [cell.lat, cell.lon, intensity];
+  });
+
+  const heat = L.heatLayer(heatPoints, {
+    radius, blur, max: 1, minOpacity: 0.45,
+    gradient: siHeatGradient(model)
+  });
+  heat.addTo(siGridLayer);
+
+  // Invisible click targets at each sample point so the real numbers
+  // behind the smoothed color are still inspectable.
   valid.forEach(cell => {
     const value = siModelValue(cell, model);
     const classIdx = siClassify(values, value);
-    const color = colors[classIdx];
-    const rect = L.rectangle(
-      [[cell.south, cell.west], [cell.north, cell.east]],
-      { color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.6 }
-    );
     const label = SI_LEGEND_CLASSES[classIdx];
-    rect.bindPopup(`
+    const marker = L.circleMarker([cell.lat, cell.lon], { radius: 10, opacity: 0, fillOpacity: 0 });
+    marker.bindPopup(`
       <strong>${label}</strong><br>
       Temp anomaly: ${cell.tempAnomaly?.toFixed(2) ?? '—'}°C<br>
       Extreme rainfall days: ${cell.extremeRainDays ?? '—'}<br>
       Longest dry spell: ${cell.drySpellDays ?? '—'} days<br>
+      Climate resilience: ${cell.climateResilience != null ? cell.climateResilience.toFixed(1) + '/100' : '—'}<br>
       Best-strategy score: ${cell.suitabilityScore != null ? cell.suitabilityScore.toFixed(1) + '/100' : '—'}
     `);
-    rect.addTo(siGridLayer);
+    marker.addTo(siGridLayer);
   });
 
   siRenderLegend(model);
+
+  // Heat layer sizing depends on screen pixel spacing, which changes with
+  // zoom — re-render (cheap, no refetch) so it keeps blending smoothly.
+  map.off('zoomend', siRerenderCurrentModel);
+  map.on('zoomend', siRerenderCurrentModel);
+}
+
+function siRerenderCurrentModel() {
+  if (!siGridCache) return;
+  const model = document.getElementById('si-model-select')?.value || 'erosion';
+  siRenderGrid(siGridCache.cells, model);
 }
 
 async function updateSuitabilityForLocation(loc) {
