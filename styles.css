@@ -831,6 +831,14 @@ footer .small {
   margin-bottom: 0.1rem;
 }
 
+.si-legend-provenance {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-bottom: 0.3rem;
+  font-style: italic;
+}
+
 .si-legend-row {
   display: flex;
   align-items: center;

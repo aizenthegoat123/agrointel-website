@@ -1121,11 +1121,25 @@ function siModelTitle(model) {
   }[model];
 }
 
+// Honest provenance note per map model: which part of the AI's backend
+// scoring is a real NASA measurement vs. a documented expert-baseline
+// assumption, so the badge in the sidebar never overstates confidence.
+function siModelProvenance(model) {
+  return {
+    erosion: 'NASA data: real GPM extreme-rainfall-day counts drive this directly.',
+    water: 'NASA data: real NASA POWER dry-spell length + temperature anomaly drive this directly.',
+    temp: 'NASA data: real NASA POWER temperature anomaly vs. 5-year climatology.',
+    resilience: 'NASA data: real NASA POWER dry-spell + temperature anomaly, scaled by a documented per-strategy sensitivity assumption.',
+    suitability: 'Mixed: real NASA data drives climate resilience, erosion reduction, and water-use trend; soil health, pest cycles, and market value remain documented expert baselines. Ask the chat for a full per-criterion breakdown of any area.'
+  }[model];
+}
+
 function siRenderLegend(model) {
   const legend = document.getElementById('si-legend');
   if (!legend) return;
   const colors = SI_GOOD_WHEN_HIGH.has(model) ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
   legend.innerHTML = `<div class="si-legend-title">${siModelTitle(model)}</div>` +
+    `<div class="si-legend-provenance">${siModelProvenance(model)}</div>` +
     SI_LEGEND_CLASSES.map((label, i) => `
       <div class="si-legend-row"><span class="si-legend-swatch" style="background:${colors[i]}"></span>${label}</div>
     `).join('');
