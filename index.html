@@ -3,32 +3,601 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Image + Chatbot</title>
+  <title>Crop Rotation Explorer | NASA Earth Data Decision Support</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="container">
-    <!-- LEFT / TOP: Image Area -->
-    <div class="image-panel">
-      <img id="mainImage" src="" alt="Rendered Image" style="display: none;" />
-      <div id="imagePlaceholder" class="image-placeholder">
-        Image will appear here
+  <header class="hero">
+    <div class="hero-content">
+      <!-- Logo -->
+      <div class="hero-logo">
+        <svg class="logo-svg" viewBox="0 0 64 64" width="72" height="72" aria-hidden="true">
+          <circle cx="32" cy="32" r="28" fill="#1b4332" stroke="#52b788" stroke-width="2.5"/>
+          <path d="M32 14 C22 22 18 34 22 46 C26 40 30 36 32 36 C34 36 38 40 42 46 C46 34 42 22 32 14 Z" fill="#52b788"/>
+          <path d="M32 36 L32 50" stroke="#d8f3dc" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="48" cy="18" r="4" fill="#f4a261"/>
+          <circle cx="48" cy="18" r="1.8" fill="#fff"/>
+        </svg>
+      </div>
+      <div class="badge"><i class="fas fa-satellite"></i> NASA Earth Observations + Local Ag Insights</div>
+      <h1>Crop Rotation Explorer</h1>
+      <p class="tagline">
+        Explore how different crop rotations can improve soil health, reduce water stress,
+        and build resilience using NASA satellite data and agricultural knowledge.
+      </p>
+      <div class="hero-actions">
+        <a href="#map-section" class="btn primary"><i class="fas fa-map-marked-alt"></i> Explore Map</a>
+        <a href="#strategies" class="btn secondary"><i class="fas fa-seedling"></i> Compare Rotations</a>
       </div>
     </div>
+    <div class="hero-bg"></div>
+  </header>
 
-    <!-- RIGHT / BOTTOM: Chatbot -->
-    <div class="chat-panel">
-      <div class="chat-header">Chatbot</div>
-      <div class="chat-messages" id="chatMessages">
-        <!-- Messages will be added here -->
-      </div>
-      <div class="chat-input-area">
-        <input type="text" id="chatInput" placeholder="Type a message..." />
-        <button id="sendBtn">Send</button>
+  <nav class="top-nav">
+    <div class="nav-inner">
+      <a href="#" class="logo">
+        <svg class="logo-svg-sm" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true">
+          <circle cx="32" cy="32" r="28" fill="#1b4332" stroke="#52b788" stroke-width="2.5"/>
+          <path d="M32 14 C22 22 18 34 22 46 C26 40 30 36 32 36 C34 36 38 40 42 46 C46 34 42 22 32 14 Z" fill="#52b788"/>
+          <path d="M32 36 L32 50" stroke="#d8f3dc" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="48" cy="18" r="4" fill="#f4a261"/>
+          <circle cx="48" cy="18" r="1.8" fill="#fff"/>
+        </svg>
+        <span>CropRot NASA</span>
+      </a>
+      <div class="nav-links">
+        <a href="#priorities">My Priorities</a>
+        <a href="#map-section">Map</a>
+        <a href="#climate">Climate & Soil</a>
+        <a href="#strategies">Rotations</a>
+        <a href="#details">Details</a>
+        <a href="#about">About</a>
       </div>
     </div>
-  </div>
+  </nav>
 
+  <!-- AGROINTEL AI Assistant -->
+  <section id="ai-assistant" class="section ai-section">
+    <div class="container">
+      <h2><i class="fas fa-robot"></i> Ask AGROINTEL AI</h2>
+      <p class="section-desc">
+        Ask a question about the best crop rotation for the sample Iowa farm above. Answers are grounded in
+        real NASA Earth-observation indicators computed for this exact location — not a generic chatbot.
+      </p>
+      <div class="ai-chat-card">
+        <div id="ai-chat-messages" class="ai-chat-messages">
+          <div class="ai-msg bot">Ask a question above to get a grounded answer from AGROINTEL AI about this location's real NASA data.</div>
+        </div>
+        <div class="ai-chat-input-area">
+          <input type="text" id="ai-chat-input" placeholder="e.g. Is a diversified rotation worth it here given recent rainfall?" />
+          <button id="ai-chat-send" class="btn primary"><i class="fas fa-paper-plane"></i> Ask</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Location & Farm Context -->
+  <section class="section context-section">
+    <div class="container">
+      <h2><i class="fas fa-map-pin"></i> Sample Study Area</h2>
+      <p class="section-desc">
+        Demonstration focused on a representative Midwest farm near Ames, Iowa
+        (≈ 42.03° N, 93.63° W). Data can be adapted to any location using NASA POWER and GIBS.
+      </p>
+      <div class="context-grid">
+        <div class="info-card">
+          <h3>Location</h3>
+          <p>Central Iowa, USA<br>Corn Belt region</p>
+        </div>
+        <div class="info-card">
+          <h3>Typical Soils</h3>
+          <p>Mollisols – high organic matter potential, good for continuous corn/soy but vulnerable to compaction & erosion when bare.</p>
+        </div>
+        <div class="info-card">
+          <h3>Climate Challenges</h3>
+          <p>Variable spring rainfall, summer heat stress, increasing extreme precipitation events, winter freeze-thaw cycles.</p>
+        </div>
+        <div class="info-card">
+          <h3>Current Practice</h3>
+          <p>Dominant 2-year Corn–Soybean rotation with limited cover crops.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- Farmer Priorities (Farmer-Centered) -->
+  <section id="priorities" class="section priorities-section">
+    <div class="container">
+      <h2><i class="fas fa-user-check"></i> Your Farm Priorities</h2>
+      <p class="section-desc">
+        Tell us what matters most on <strong>your</strong> farm. This helps highlight which rotation ideas may fit best.
+        You can change these anytime. Nothing is saved on a server — it stays in your browser.
+      </p>
+
+      <div class="priorities-card">
+        <div class="priorities-grid">
+          <div class="priority-group">
+            <h3><i class="fas fa-tint"></i> Water & Weather</h3>
+            <label class="check-label"><input type="checkbox" name="priority" value="water-scarce"> Limited water / frequent dry spells</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="heavy-rain"> Heavy rain & erosion concerns</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="heat-stress"> Summer heat stress on crops</label>
+          </div>
+
+          <div class="priority-group">
+            <h3><i class="fas fa-tractor"></i> Equipment & Labor</h3>
+            <label class="check-label"><input type="checkbox" name="priority" value="limited-equip"> Limited equipment for small grains / forage</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="labor-tight"> Tight labor / want simpler management</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="no-till"> Prefer no-till or reduced tillage</label>
+          </div>
+
+          <div class="priority-group">
+            <h3><i class="fas fa-store"></i> Markets & Income</h3>
+            <label class="check-label"><input type="checkbox" name="priority" value="grain-market"> Strong local grain markets (corn/soy)</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="forage-market"> Access to hay / livestock markets</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="cash-flow"> Need steady short-term cash flow</label>
+          </div>
+
+          <div class="priority-group">
+            <h3><i class="fas fa-seedling"></i> Soil & Long-term Goals</h3>
+            <label class="check-label"><input type="checkbox" name="priority" value="build-om"> Build organic matter / soil health</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="break-pests"> Break pest or disease cycles</label>
+            <label class="check-label"><input type="checkbox" name="priority" value="n-fix"> Reduce synthetic nitrogen use</label>
+          </div>
+        </div>
+
+        <div class="priorities-actions">
+          <button id="apply-priorities" class="btn primary"><i class="fas fa-magic"></i> Show Matching Ideas</button>
+          <button id="reset-priorities" class="btn small secondary">Reset</button>
+        </div>
+
+        <div id="priority-result" class="priority-result" hidden>
+          <h3><i class="fas fa-lightbulb"></i> Based on what you selected</h3>
+          <p id="priority-summary"></p>
+          <div id="priority-suggestions" class="suggestion-chips"></div>
+          <p class="priority-note">
+            <strong>Remember:</strong> These are ideas to discuss with your local agronomist, Extension agent, or trusted advisor.
+            Your soil tests, field history, and business goals matter more than any map or model.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Interactive Map -->
+  <section id="map-section" class="section map-section">
+    <div class="container">
+      <h2><i class="fas fa-globe-americas"></i> Interactive Earth Observation Map</h2>
+      <p class="section-desc">
+        Explore satellite views, field-level vulnerability zones, and simple “what-if” climate scenarios.
+        Click fields for details. Use the timeline and overlays to see how conditions change.
+      </p>
+      <div class="simple-tip">
+        <strong>Tip:</strong> You do not need to understand every satellite layer. Start with True Color or NDVI,
+        then try the vulnerability overlays and the scenario slider below the map.
+      </div>
+
+      <div class="map-controls">
+        <label>Base Map:
+          <select id="base-layer">
+            <option value="sat">Satellite (Esri)</option>
+            <option value="osm">OpenStreetMap</option>
+          </select>
+        </label>
+        <label>NASA Layer:
+          <select id="gibs-layer">
+            <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra True Color</option>
+            <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua True Color</option>
+            <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">VIIRS True Color</option>
+            <option value="MODIS_Terra_CorrectedReflectance_Bands721">MODIS Bands 7-2-1 (Ag)</option>
+            <option value="MODIS_Terra_NDVI_8Day">MODIS NDVI (Vegetation)</option>
+            <option value="MODIS_Terra_Land_Surface_Temp_Day">Land Surface Temp</option>
+          </select>
+        </label>
+        <label>Date:
+          <input type="date" id="gibs-date" value="2024-07-15" />
+        </label>
+        <label>Opacity:
+          <input type="range" id="layer-opacity" min="0.2" max="1" step="0.05" value="0.75" />
+        </label>
+        <button id="update-layer" class="btn small"><i class="fas fa-sync"></i> Update</button>
+        <button id="locate-farm" class="btn small secondary"><i class="fas fa-crosshairs"></i> Center Farm</button>
+      </div>
+
+      <div class="map-layout">
+        <div class="map-main">
+          <div id="map"></div>
+          <div class="map-legend">
+            <span><span class="dot corn"></span> Corn Field</span>
+            <span><span class="dot soy"></span> Soy Field</span>
+            <span><span class="dot cover"></span> Diversification Area</span>
+            <span><span class="dot erosion"></span> Erosion risk</span>
+            <span><span class="dot waterstress"></span> Water-stress hotspot</span>
+            <span><span class="dot frost"></span> Frost-prone</span>
+          </div>
+        </div>
+        <div class="map-side">
+          <h3><i class="fas fa-layer-group"></i> Vulnerability Overlays</h3>
+          <p class="side-hint">Toggle zones that highlight field-level risks (illustrative for this sample area).</p>
+          <label class="check-label"><input type="checkbox" id="overlay-erosion" checked> Erosion risk zones</label>
+          <label class="check-label"><input type="checkbox" id="overlay-water" checked> Water-stress hotspots</label>
+          <label class="check-label"><input type="checkbox" id="overlay-frost"> Frost-prone areas</label>
+
+          <h3 style="margin-top:1.25rem"><i class="fas fa-clock"></i> Timeline (season)</h3>
+          <p class="side-hint">Slide to approximate seasonal conditions for the sample farm.</p>
+          <input type="range" id="season-slider" min="0" max="3" step="1" value="2" />
+          <div class="season-labels">
+            <span>Spring</span><span>Early Summer</span><span>Peak Summer</span><span>Fall</span>
+          </div>
+          <p id="season-note" class="season-note">Peak summer: higher heat stress and soil-moisture drawdown risk.</p>
+
+          <h3 style="margin-top:1.25rem"><i class="fas fa-sliders-h"></i> Scenario Slider</h3>
+          <p class="side-hint">Explore a simple “what-if” on rainfall and temperature (illustrative only).</p>
+          <label>Rainfall change: <span id="rain-val">0%</span></label>
+          <input type="range" id="rain-slider" min="-30" max="30" step="5" value="0" />
+          <label>Temperature change: <span id="temp-val">0°C</span></label>
+          <input type="range" id="temp-slider" min="-2" max="3" step="0.5" value="0" />
+          <p id="scenario-note" class="season-note">Current climate baseline for the sample area.</p>
+        </div>
+      </div>
+
+      <div class="trends-panel">
+        <h3><i class="fas fa-chart-line"></i> Long-term Trends (sample area)</h3>
+        <p class="section-desc" style="margin-bottom:1rem">
+          Illustrative patterns based on NASA POWER, SMAP concepts, and regional GRACE/GRACE-FO style water-storage signals.
+          These help frame rotation choices; they are not farm-specific forecasts.
+        </p>
+        <div class="trends-grid">
+          <div class="trend-card">
+            <h4>Soil Moisture</h4>
+            <p>Surface moisture often drops quickly after mid-summer storms. Bare fields after soybean harvest hold less water and lose more to runoff in intense rain.</p>
+            <div class="trend-bar"><div class="trend-fill" style="width:55%"></div></div>
+            <span class="trend-label">Moderate variability · higher risk when bare</span>
+          </div>
+          <div class="trend-card">
+            <h4>Heat Waves</h4>
+            <p>More frequent warm spells raise canopy stress, especially on continuous corn. Living cover and higher organic matter can moderate surface temperatures.</p>
+            <div class="trend-bar hot"><div class="trend-fill" style="width:70%"></div></div>
+            <span class="trend-label">Increasing exposure in peak summer</span>
+          </div>
+          <div class="trend-card">
+            <h4>Water Storage (regional)</h4>
+            <p>Long-term groundwater and soil-water signals point to the value of rotations that improve infiltration and reduce evaporative demand.</p>
+            <div class="trend-bar water"><div class="trend-fill" style="width:40%"></div></div>
+            <span class="trend-label">Watch long-term declines · build resilience</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Climate & Soil Insights -->
+  <section id="climate" class="section climate-section">
+    <div class="container">
+      <h2><i class="fas fa-cloud-sun-rain"></i> Climate & Soil Moisture Patterns</h2>
+      <p class="section-desc">
+        These charts show temperature and rainfall for the sample area (using free NASA climate data).
+        You can load real numbers for 2023–2024. The notes below explain what the patterns may mean for soil and crops —
+        in everyday language.
+      </p>
+      <div class="climate-controls">
+        <button id="load-power" class="btn primary"><i class="fas fa-download"></i> Load NASA POWER Data (2023–2024)</button>
+        <span id="power-status" class="status"></span>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Daily Precipitation (mm)</h3>
+          <canvas id="precip-chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Temperature (°C) – Max / Mean / Min</h3>
+          <canvas id="temp-chart"></canvas>
+        </div>
+      </div>
+      <div class="insights-grid">
+        <div class="insight-card">
+          <i class="fas fa-tint"></i>
+          <h4>Soil Moisture Windows</h4>
+          <p>SMAP-derived surface soil moisture often shows rapid drying after mid-summer storms. Fields left bare after soybean harvest have lower infiltration and higher runoff risk during intense GPM-observed rainfall events.</p>
+        </div>
+        <div class="insight-card">
+          <i class="fas fa-thermometer-half"></i>
+          <h4>Heat & Vegetation Stress</h4>
+          <p>ECOSTRESS and MODIS land surface temperature indicate higher canopy stress on continuous corn in dry spells. Diversified rotations with deeper-rooted crops or covers can moderate surface temperatures.</p>
+        </div>
+        <div class="insight-card">
+          <i class="fas fa-water"></i>
+          <h4>Long-term Water Trends</h4>
+          <p>GRACE/GRACE-FO regional groundwater signals and NASA POWER precipitation trends highlight the value of rotations that improve infiltration and reduce evaporative demand during critical growth stages.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Rotation Strategies -->
+  <section id="strategies" class="section strategies-section">
+    <div class="container">
+      <h2><i class="fas fa-sync-alt"></i> Compare Rotation Strategies</h2>
+      <p class="section-desc">
+        Below are three rotation ideas, including the common corn–soy system many farms already use.
+        Each one explains why it might help, what the satellite and research data suggest,
+        and what you should double-check with a local expert before changing anything on your farm.
+      </p>
+      <div class="farmer-reminder">
+        <i class="fas fa-exclamation-triangle"></i>
+        <p><strong>This tool does not tell you what to plant.</strong> It only shows patterns and possibilities.
+        Your soil tests, yield history, equipment, landlord agreements, and market contracts are more important
+        than any map or model. Always talk with your agronomist, Extension agent, or trusted advisor before making changes.</p>
+      </div>
+
+      <div class="strategy-tabs">
+        <button class="tab-btn active" data-tab="current">1. Existing Corn–Soy</button>
+        <button class="tab-btn" data-tab="diverse">2. Diversified + Small Grain</button>
+        <button class="tab-btn" data-tab="soil">3. Soil-Building + Forage</button>
+      </div>
+
+      <div class="tab-content active" id="tab-current">
+        <div class="strategy-header">
+          <h3>Existing Rotation: Continuous Corn–Soybean (2-year)</h3>
+          <span class="badge neutral">Baseline</span>
+        </div>
+        <div class="strategy-body">
+          <div class="strategy-col">
+            <h4>Why this is common</h4>
+            <p>High market demand, established equipment, strong short-term returns, and familiarity. Soybean provides some nitrogen credit for the following corn.</p>
+            <h4>Supporting patterns</h4>
+            <ul>
+              <li>MODIS NDVI shows strong peak biomass in both crops under good conditions.</li>
+              <li>NASA POWER precipitation supports adequate water in average years for both crops.</li>
+            </ul>
+            <h4>Benefits</h4>
+            <ul>
+              <li>Simple management and marketing.</li>
+              <li>Relatively high short-term profitability in good years.</li>
+            </ul>
+          </div>
+          <div class="strategy-col">
+            <h4>Limitations observed</h4>
+            <ul>
+              <li>Long periods of bare soil after harvest → higher erosion risk during intense rainfall (GPM extremes).</li>
+              <li>Build-up of soybean cyst nematode and other pests with short rotations.</li>
+              <li>Limited organic matter accumulation and poorer infiltration compared with more diverse systems.</li>
+              <li>Higher fertilizer N needs for corn phase.</li>
+            </ul>
+            <h4>Information gaps & risks</h4>
+            <p>Local soil tests, nematode pressure, and exact market contracts are essential. Extreme weather years can still cause large yield swings. This tool does not replace on-farm trials or advisor recommendations.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-diverse">
+        <div class="strategy-header">
+          <h3>Diversified Rotation: Corn – Soybean – Winter Wheat / Oats + Cover Crops</h3>
+          <span class="badge positive">Recommended for Resilience</span>
+        </div>
+        <div class="strategy-body">
+          <div class="strategy-col">
+            <h4>Why suggested</h4>
+            <p>Adds a small grain to break pest cycles, keep living roots longer, reduce bare-soil windows, and improve soil structure. Research across the Midwest shows yield stability gains and reduced nitrate leaching.</p>
+            <h4>Evidence support</h4>
+            <ul>
+              <li>Longer living-root periods improve infiltration (beneficial under high-intensity precipitation events seen in GPM data).</li>
+              <li>Small grains can utilize residual N and reduce tile nitrate losses.</li>
+              <li>MODIS/ECOSTRESS patterns suggest moderated heat stress with better soil cover.</li>
+              <li>University trials (Minnesota, Illinois, Nebraska, Ohio) document improved soil health indicators and corn yield stability.</li>
+            </ul>
+            <h4>Potential benefits</h4>
+            <ul>
+              <li>Interrupts pest & disease cycles (e.g., SCN).</li>
+              <li>Better erosion control and organic matter trend.</li>
+              <li>Possible double-crop or forage opportunity after wheat.</li>
+              <li>Improved water infiltration and drought buffering.</li>
+            </ul>
+          </div>
+          <div class="strategy-col">
+            <h4>Information gaps</h4>
+            <p>Local markets for wheat/oats, equipment availability for small grains, and precise cover-crop termination timing need farmer/expert input. Yield of the third crop varies with weather.</p>
+            <h4>Risks requiring local review</h4>
+            <ul>
+              <li>Learning curve and possible short-term yield dip while system adjusts.</li>
+              <li>Herbicide carryover constraints.</li>
+              <li>Market price volatility for small grains.</li>
+            </ul>
+            <p class="note">This is a decision-support suggestion only. Validate with local Extension and on-farm experimentation.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-soil">
+        <div class="strategy-header">
+          <h3>Soil-Building Rotation: Corn – Soybean – Alfalfa / Mixed Forage (or Oats + Legume)</h3>
+          <span class="badge positive">Strong Soil Health Focus</span>
+        </div>
+        <div class="strategy-body">
+          <div class="strategy-col">
+            <h4>Why suggested</h4>
+            <p>Perennial or multi-year forages add deep roots, continuous cover, biological nitrogen fixation, and significant organic matter. Long-term Ohio and Nebraska studies show higher and more stable corn yields after forage phases, especially under no-till.</p>
+            <h4>Evidence support</h4>
+            <ul>
+              <li>Deep roots improve soil structure and water holding capacity — valuable under variable SMAP soil-moisture regimes.</li>
+              <li>Nitrogen fixation reduces synthetic N needs for subsequent corn.</li>
+              <li>Near-continuous cover dramatically cuts erosion during extreme precipitation.</li>
+              <li>Improved aggregate stability and microbial activity reported in long-term trials.</li>
+            </ul>
+            <h4>Potential benefits</h4>
+            <ul>
+              <li>Highest potential soil organic matter gains.</li>
+              <li>Supplemental forage income or livestock integration.</li>
+              <li>Strongest resilience to drought and intense rain.</li>
+              <li>Breaks pest cycles most effectively.</li>
+            </ul>
+          </div>
+          <div class="strategy-col">
+            <h4>Information gaps</h4>
+            <p>Requires livestock or reliable forage markets. Establishment cost and multi-year commitment. Local soil pH, drainage, and weed pressure must be assessed.</p>
+            <h4>Risks requiring local review</h4>
+            <ul>
+              <li>Cash-flow timing (forage years vs. grain years).</li>
+              <li>Termination and transition back to annuals needs careful planning.</li>
+              <li>Not suitable for every farm business model.</li>
+            </ul>
+            <p class="note">Best suited where livestock or hay markets exist, or where long-term soil capital is a priority. Always consult local experts.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Detailed Comparison Table -->
+  <section id="details" class="section details-section">
+    <div class="container">
+      <h2><i class="fas fa-table"></i> Side-by-Side Comparison</h2>
+      <div class="table-wrapper">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Aspect</th>
+              <th>1. Corn–Soy (Existing)</th>
+              <th>2. Corn–Soy–Wheat + Cover</th>
+              <th>3. Corn–Soy–Alfalfa/Forage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Soil Cover Duration</td>
+              <td>Low–Moderate</td>
+              <td>High</td>
+              <td>Very High</td>
+            </tr>
+            <tr>
+              <td>Pest Cycle Break</td>
+              <td>Weak</td>
+              <td>Good</td>
+              <td>Excellent</td>
+            </tr>
+            <tr>
+              <td>Nitrogen Fixation / Credit</td>
+              <td>Moderate (soy)</td>
+              <td>Moderate + residual capture</td>
+              <td>High (legume forage)</td>
+            </tr>
+            <tr>
+              <td>Erosion & Runoff Risk</td>
+              <td>Higher (bare periods)</td>
+              <td>Lower</td>
+              <td>Lowest</td>
+            </tr>
+            <tr>
+              <td>Organic Matter Trend</td>
+              <td>Stable to slight decline</td>
+              <td>Improving</td>
+              <td>Strongest improvement</td>
+            </tr>
+            <tr>
+              <td>Water Infiltration / Drought Buffer</td>
+              <td>Baseline</td>
+              <td>Improved</td>
+              <td>Best</td>
+            </tr>
+            <tr>
+              <td>Market Complexity</td>
+              <td>Simple</td>
+              <td>Moderate</td>
+              <td>Higher (forage/livestock)</td>
+            </tr>
+            <tr>
+              <td>Short-term Cash Flow</td>
+              <td>Strong</td>
+              <td>Good</td>
+              <td>Variable</td>
+            </tr>
+            <tr>
+              <td>Resilience to Extreme Weather</td>
+              <td>Moderate</td>
+              <td>Good</td>
+              <td>High</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="farmer-reminder">
+        <i class="fas fa-handshake"></i>
+        <p>
+          <strong>Human judgment comes first.</strong> This tool only helps you explore options.
+          Places where your local knowledge is especially important:
+        </p>
+      </div>
+      <ul style="margin: 0.75rem 0 1.25rem 1.5rem; line-height: 1.6;">
+        <li>Your actual soil test results and drainage</li>
+        <li>Landlord or bank requirements</li>
+        <li>Equipment you already own (or can rent)</li>
+        <li>Local markets and delivery contracts</li>
+        <li>Weed, insect, and disease pressure you have seen in recent years</li>
+        <li>Your own comfort with trying something new</li>
+      </ul>
+      <p class="disclaimer">
+        <strong>Important:</strong> Patterns from NASA satellites and university research are useful starting points,
+        but they never replace the knowledge of the person who walks the field. Use this tool to ask better questions —
+        then decide together with people who know your ground.
+      </p>
+    </div>
+  </section>
+
+  <!-- About / Data Sources -->
+  <section id="about" class="section about-section">
+    <div class="container">
+      <h2><i class="fas fa-info-circle"></i> About This Tool & Data Sources</h2>
+      <div class="about-grid">
+        <div>
+          <h3>NASA Datasets Referenced</h3>
+          <ul>
+            <li><strong>SMAP</strong> – Soil moisture</li>
+            <li><strong>GPM</strong> – Precipitation extremes</li>
+            <li><strong>MODIS / VIIRS</strong> – Vegetation (NDVI), true color, land surface temperature</li>
+            <li><strong>ECOSTRESS</strong> – Evapotranspiration & heat stress concepts</li>
+            <li><strong>NASA POWER</strong> – Temperature, precipitation, humidity (live API used)</li>
+            <li><strong>GRACE / GRACE-FO</strong> – Regional water storage trends</li>
+            <li><strong>SRTM</strong> – Elevation context</li>
+          </ul>
+        </div>
+        <div>
+          <h3>How to Adapt</h3>
+          <p>
+            Change the latitude/longitude in the JavaScript for any farm.
+            Update the GIBS date and layer for recent imagery.
+            The NASA POWER fetch can be pointed at any coordinates.
+            Local soil surveys (SSURGO), yield history, and farmer priorities should be layered on top.
+          </p>
+          <h3>Intended Use</h3>
+          <p>
+            Supportive exploration of options that may improve soil health and climate resilience.
+            Final decisions remain with the farmer and local experts.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-logo">
+        <svg viewBox="0 0 64 64" width="40" height="40" aria-hidden="true">
+          <circle cx="32" cy="32" r="28" fill="#1b4332" stroke="#52b788" stroke-width="2.5"/>
+          <path d="M32 14 C22 22 18 34 22 46 C26 40 30 36 32 36 C34 36 38 40 42 46 C46 34 42 22 32 14 Z" fill="#52b788"/>
+          <path d="M32 36 L32 50" stroke="#d8f3dc" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="48" cy="18" r="4" fill="#f4a261"/>
+          <circle cx="48" cy="18" r="1.8" fill="#fff"/>
+        </svg>
+      </div>
+      <p>Crop Rotation Explorer — Decision-support prototype using open NASA Earth data.</p>
+      <p class="small">Not an official NASA product. For educational and exploratory purposes.</p>
+    </div>
+  </footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

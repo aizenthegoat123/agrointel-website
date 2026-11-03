@@ -1,88 +1,653 @@
-// ======================
-// IMAGE FUNCTIONS
-// ======================
+/* Crop Rotation Explorer – Main Script */
 
-/**
- * Change the image shown on the left side.
- * @param {string} imageUrl - URL or path of the new image
- */
-function changeImage(imageUrl) {
-  // TODO: Write your logic here
-  // Example idea:
-  // const img = document.getElementById("mainImage");
-  // const placeholder = document.getElementById("imagePlaceholder");
-  // img.src = imageUrl;
-  // img.style.display = "block";
-  // placeholder.style.display = "none";
+// Study location: near Ames, Iowa
+const FARM_LAT = 42.0308;
+const FARM_LON = -93.6319;
+
+// ===== Map Setup =====
+const map = L.map('map', {
+  center: [FARM_LAT, FARM_LON],
+  zoom: 10,
+  zoomControl: true,
+  maxZoom: 18
+});
+
+// Base layers
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors',
+  maxZoom: 19
+});
+
+const esriSat = L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {
+    attribution: 'Tiles © Esri',
+    maxZoom: 18
+  }
+);
+
+// Start with satellite base (clearer for agriculture)
+esriSat.addTo(map);
+
+// NASA GIBS – official working template from nasa-gibs examples
+function createGibsLayer(layerName, dateStr, format = 'jpg') {
+  const template =
+    `https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{tileMatrixSet}/{z}/{y}/{x}.${format}`;
+
+  return L.tileLayer(template, {
+    layer: layerName,
+    tileMatrixSet: 'GoogleMapsCompatible_Level9',
+    time: dateStr,
+    tileSize: 256,
+    subdomains: 'abc',
+    maxZoom: 9,
+    opacity: 0.75,
+    noWrap: false,
+    bounds: [
+      [-85.0511287776, -179.999999975],
+      [85.0511287776, 179.999999975]
+    ],
+    attribution: 'Imagery © <a href="https://earthdata.nasa.gov/gibs">NASA EOSDIS GIBS</a>',
+    errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+  });
 }
 
-/**
- * Clear the current image and show the placeholder again
- */
-function clearImage() {
-  // TODO: Write your logic here
+// Layer definitions (name → format)
+const gibsLayers = {
+  'MODIS_Terra_CorrectedReflectance_TrueColor': 'jpg',
+  'MODIS_Aqua_CorrectedReflectance_TrueColor': 'jpg',
+  'VIIRS_SNPP_CorrectedReflectance_TrueColor': 'jpg',
+  'MODIS_Terra_NDVI_8Day': 'png',
+  'MODIS_Terra_Land_Surface_Temp_Day': 'png',
+  'MODIS_Terra_CorrectedReflectance_Bands721': 'jpg'
+};
+
+let currentGibs = null;
+const markers = [];
+
+function updateGibsLayer() {
+  const layerName = document.getElementById('gibs-layer').value;
+  const dateStr = document.getElementById('gibs-date').value || '2024-07-15';
+  const format = gibsLayers[layerName] || 'jpg';
+
+  if (currentGibs) {
+    map.removeLayer(currentGibs);
+  }
+
+  currentGibs = createGibsLayer(layerName, dateStr, format);
+  currentGibs.addTo(map);
+
+  // Bring markers to front
+  markers.forEach(m => m.bringToFront());
 }
 
-// ======================
-// CHATBOT FUNCTIONS
-// ======================
+// Base layer switcher
+document.getElementById('base-layer')?.addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (val === 'osm') {
+    map.removeLayer(esriSat);
+    osm.addTo(map);
+  } else {
+    map.removeLayer(osm);
+    esriSat.addTo(map);
+  }
+  if (currentGibs) currentGibs.bringToFront();
+});
 
-/**
- * Add a message to the chat window
- * @param {string} text - Message content
- * @param {"user" | "bot"} sender - Who sent the message
- */
-function addMessage(text, sender) {
-  // TODO: Write your logic here
-  // Example idea:
-  // const messagesDiv = document.getElementById("chatMessages");
-  // const msg = document.createElement("div");
-  // msg.className = `message ${sender}`;
-  // msg.textContent = text;
-  // messagesDiv.appendChild(msg);
-  // messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
+document.getElementById('update-layer').addEventListener('click', updateGibsLayer);
+document.getElementById('locate-farm').addEventListener('click', () => {
+  map.setView([FARM_LAT, FARM_LON], 12);
+});
 
-/**
- * Called when the user clicks Send or presses Enter
- */
-function sendMessage() {
-  // TODO: Write your logic here
-  // Example idea:
-  // const input = document.getElementById("chatInput");
-  // const text = input.value.trim();
-  // if (!text) return;
-  // addMessage(text, "user");
-  // input.value = "";
-  // handleBotResponse(text);   // you will write this
-}
-
-/**
- * Handle the bot's reply after user sends a message
- * @param {string} userMessage
- */
-function handleBotResponse(userMessage) {
-  // TODO: Write your bot logic / API call here
-  // Then call addMessage(reply, "bot");
-}
-
-/**
- * Optional: Clear all chat messages
- */
-function clearChat() {
-  // TODO: Write your logic here
-}
-
-// ======================
-// EVENT LISTENERS
-// ======================
-document.getElementById("sendBtn").addEventListener("click", sendMessage);
-
-document.getElementById("chatInput").addEventListener("keypress", function (e) {
-  if (e.key === "Enter") {
-    sendMessage();
+// Opacity control
+document.getElementById('layer-opacity')?.addEventListener('input', (e) => {
+  if (currentGibs) {
+    currentGibs.setOpacity(parseFloat(e.target.value));
   }
 });
 
-// Example of how you can call changeImage later:
-// changeImage("https://example.com/image.jpg");
+// Initial GIBS layer
+updateGibsLayer();
+
+// Sample field markers – new stronger colors
+const fields = [
+  {
+    lat: 42.041,
+    lon: -93.645,
+    name: 'North Field – Corn (2024)',
+    type: 'corn',
+    note: 'Typical continuous corn phase. Watch for bare soil after harvest and summer heat stress windows.'
+  },
+  {
+    lat: 42.018,
+    lon: -93.618,
+    name: 'South Field – Soybean (2024)',
+    type: 'soy',
+    note: 'Soybean phase. Short rotation increases SCN risk. Consider small grain or cover after harvest.'
+  },
+  {
+    lat: 42.035,
+    lon: -93.602,
+    name: 'East Block – Diversification Candidate',
+    type: 'cover',
+    note: 'Good candidate for winter wheat or oats + cover crop. Improves infiltration and breaks pest cycles.'
+  }
+];
+
+const iconColors = {
+  corn: '#e67e22',      // strong orange
+  soy: '#27ae60',       // fresh green
+  cover: '#f1c40f'      // bright gold
+};
+
+fields.forEach(f => {
+  const marker = L.circleMarker([f.lat, f.lon], {
+    radius: 11,
+    fillColor: iconColors[f.type],
+    color: '#ffffff',
+    weight: 3,
+    opacity: 1,
+    fillOpacity: 0.95
+  }).addTo(map);
+
+  marker.bindPopup(`
+    <strong style="font-size:1.05em">${f.name}</strong><br>
+    ${f.note}<br>
+    <small style="color:#666">Lat ${f.lat.toFixed(3)}, Lon ${f.lon.toFixed(3)}</small>
+  `);
+
+  markers.push(marker);
+});
+
+
+// ===== Vulnerability overlays (illustrative field-level zones) =====
+const erosionZones = L.layerGroup([
+  L.polygon([
+    [42.048, -93.655], [42.048, -93.640], [42.038, -93.640], [42.038, -93.655]
+  ], { color: '#c0392b', weight: 2, fillColor: '#c0392b', fillOpacity: 0.25 }),
+  L.polygon([
+    [42.025, -93.625], [42.025, -93.612], [42.015, -93.612], [42.015, -93.625]
+  ], { color: '#c0392b', weight: 2, fillColor: '#c0392b', fillOpacity: 0.2 })
+]);
+
+const waterStressZones = L.layerGroup([
+  L.circle([42.041, -93.645], { radius: 450, color: '#2980b9', weight: 2, fillColor: '#2980b9', fillOpacity: 0.22 }),
+  L.circle([42.018, -93.618], { radius: 380, color: '#2980b9', weight: 2, fillColor: '#2980b9', fillOpacity: 0.2 })
+]);
+
+const frostZones = L.layerGroup([
+  L.polygon([
+    [42.055, -93.660], [42.055, -93.630], [42.050, -93.630], [42.050, -93.660]
+  ], { color: '#8e44ad', weight: 2, fillColor: '#8e44ad', fillOpacity: 0.2 })
+]);
+
+// Bind popups to zones
+erosionZones.eachLayer(l => l.bindPopup('<strong>Erosion risk zone</strong><br>Steeper or bare areas after harvest. Living cover and residue help.'));
+waterStressZones.eachLayer(l => l.bindPopup('<strong>Water-stress hotspot</strong><br>Faster soil-moisture drawdown in dry spells. Deeper roots / cover can buffer.'));
+frostZones.eachLayer(l => l.bindPopup('<strong>Frost-prone area</strong><br>Low-lying or cooler microclimate. Watch spring/fall planting windows.'));
+
+// Default: show erosion + water stress
+erosionZones.addTo(map);
+waterStressZones.addTo(map);
+
+document.getElementById('overlay-erosion')?.addEventListener('change', (e) => {
+  if (e.target.checked) erosionZones.addTo(map); else map.removeLayer(erosionZones);
+});
+document.getElementById('overlay-water')?.addEventListener('change', (e) => {
+  if (e.target.checked) waterStressZones.addTo(map); else map.removeLayer(waterStressZones);
+});
+document.getElementById('overlay-frost')?.addEventListener('change', (e) => {
+  if (e.target.checked) frostZones.addTo(map); else map.removeLayer(frostZones);
+});
+
+// ===== Season timeline =====
+const seasonNotes = [
+  'Spring: planting window, frost risk in low spots, soil often wet.',
+  'Early summer: canopy building, good moisture window if rains arrive on time.',
+  'Peak summer: higher heat stress and soil-moisture drawdown risk.',
+  'Fall: harvest and bare-soil window — erosion risk rises with intense rain.'
+];
+
+document.getElementById('season-slider')?.addEventListener('input', (e) => {
+  const i = parseInt(e.target.value, 10);
+  const note = document.getElementById('season-note');
+  if (note) note.textContent = seasonNotes[i] || '';
+});
+
+// ===== Scenario sliders (illustrative what-if) =====
+function updateScenarioNote() {
+  const rain = parseInt(document.getElementById('rain-slider')?.value || 0, 10);
+  const temp = parseFloat(document.getElementById('temp-slider')?.value || 0);
+  const rainEl = document.getElementById('rain-val');
+  const tempEl = document.getElementById('temp-val');
+  const note = document.getElementById('scenario-note');
+  if (rainEl) rainEl.textContent = (rain > 0 ? '+' : '') + rain + '%';
+  if (tempEl) tempEl.textContent = (temp > 0 ? '+' : '') + temp + '°C';
+
+  let msg = 'Current climate baseline for the sample area.';
+  if (rain < -10 && temp > 1) {
+    msg = 'Drier + warmer: higher water-stress risk. Cover crops and deeper-rooted rotations become more valuable.';
+  } else if (rain < -10) {
+    msg = 'Drier conditions: focus on infiltration and residual moisture. Avoid long bare periods.';
+  } else if (temp > 1.5) {
+    msg = 'Warmer peak season: heat stress on corn rises. Living cover and soil organic matter can help.';
+  } else if (rain > 15) {
+    msg = 'Wetter pattern: erosion and ponding risk increase on bare ground. Keep residue and living cover.';
+  } else if (rain !== 0 || temp !== 0) {
+    msg = 'Mild shift from baseline. Still worth discussing cover and diversification with your advisor.';
+  }
+  if (note) note.textContent = msg;
+}
+
+document.getElementById('rain-slider')?.addEventListener('input', updateScenarioNote);
+document.getElementById('temp-slider')?.addEventListener('input', updateScenarioNote);
+
+
+// ===== Tabs =====
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ===== NASA POWER Data + Charts =====
+let precipChart = null;
+let tempChart = null;
+
+async function loadNasaPower() {
+  const status = document.getElementById('power-status');
+  status.textContent = 'Fetching NASA POWER data…';
+
+  // Two years of daily data (AG community)
+  const start = '20230101';
+  const end = '20241231';
+  const params = 'T2M,T2M_MAX,T2M_MIN,PRECTOTCORR';
+  const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=${params}&community=AG&longitude=${FARM_LON}&latitude=${FARM_LAT}&start=${start}&end=${end}&format=JSON`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+
+    const paramsData = json.properties.parameter;
+    const dates = Object.keys(paramsData.T2M).sort();
+
+    // Aggregate to monthly for clearer charts
+    const monthly = {};
+    dates.forEach(d => {
+      const ym = d.substring(0, 6); // YYYYMM
+      if (!monthly[ym]) {
+        monthly[ym] = { precip: 0, tmean: [], tmax: [], tmin: [], count: 0 };
+      }
+      const p = paramsData.PRECTOTCORR[d];
+      const t = paramsData.T2M[d];
+      const tx = paramsData.T2M_MAX[d];
+      const tn = paramsData.T2M_MIN[d];
+      if (p !== undefined && p > -900) monthly[ym].precip += p;
+      if (t !== undefined && t > -900) monthly[ym].tmean.push(t);
+      if (tx !== undefined && tx > -900) monthly[ym].tmax.push(tx);
+      if (tn !== undefined && tn > -900) monthly[ym].tmin.push(tn);
+      monthly[ym].count++;
+    });
+
+    const labels = Object.keys(monthly).sort().map(ym => {
+      const y = ym.substring(0, 4);
+      const m = ym.substring(4, 6);
+      return `${y}-${m}`;
+    });
+
+    const precipVals = Object.keys(monthly).sort().map(ym =>
+      Math.round(monthly[ym].precip * 10) / 10
+    );
+
+    const tmeanVals = Object.keys(monthly).sort().map(ym => {
+      const arr = monthly[ym].tmean;
+      return arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
+    });
+    const tmaxVals = Object.keys(monthly).sort().map(ym => {
+      const arr = monthly[ym].tmax;
+      return arr.length ? Math.round(Math.max(...arr) * 10) / 10 : null;
+    });
+    const tminVals = Object.keys(monthly).sort().map(ym => {
+      const arr = monthly[ym].tmin;
+      return arr.length ? Math.round(Math.min(...arr) * 10) / 10 : null;
+    });
+
+    // Destroy previous charts if any
+    if (precipChart) precipChart.destroy();
+    if (tempChart) tempChart.destroy();
+
+    // Precipitation chart
+    const ctxP = document.getElementById('precip-chart').getContext('2d');
+    precipChart = new Chart(ctxP, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Monthly Precipitation (mm)',
+          data: precipVals,
+          backgroundColor: 'rgba(74, 144, 164, 0.7)',
+          borderColor: 'rgba(74, 144, 164, 1)',
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { mode: 'index' }
+        },
+        scales: {
+          y: { beginAtZero: true, title: { display: true, text: 'mm' } }
+        }
+      }
+    });
+
+    // Temperature chart
+    const ctxT = document.getElementById('temp-chart').getContext('2d');
+    tempChart = new Chart(ctxT, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Max',
+            data: tmaxVals,
+            borderColor: '#e76f51',
+            backgroundColor: 'transparent',
+            tension: 0.2,
+            pointRadius: 2
+          },
+          {
+            label: 'Mean',
+            data: tmeanVals,
+            borderColor: '#2a9d8f',
+            backgroundColor: 'transparent',
+            tension: 0.2,
+            pointRadius: 2
+          },
+          {
+            label: 'Min',
+            data: tminVals,
+            borderColor: '#4a90a4',
+            backgroundColor: 'transparent',
+            tension: 0.2,
+            pointRadius: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          tooltip: { mode: 'index', intersect: false }
+        },
+        scales: {
+          y: { title: { display: true, text: '°C' } }
+        }
+      }
+    });
+
+    status.textContent = `Loaded ${dates.length} days of NASA POWER data for ${FARM_LAT.toFixed(2)}°N, ${Math.abs(FARM_LON).toFixed(2)}°W.`;
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Could not load live data (network or CORS). Showing illustrative patterns instead.';
+    // Fallback demo data
+    renderFallbackCharts();
+  }
+}
+
+function renderFallbackCharts() {
+  const labels = ['2023-01','2023-04','2023-07','2023-10','2024-01','2024-04','2024-07','2024-10'];
+  const precip = [25, 80, 110, 55, 30, 95, 130, 60];
+  const tmean = [-5, 10, 24, 12, -4, 11, 25, 13];
+  const tmax = [2, 18, 32, 20, 3, 19, 33, 21];
+  const tmin = [-12, 2, 16, 4, -11, 3, 17, 5];
+
+  if (precipChart) precipChart.destroy();
+  if (tempChart) tempChart.destroy();
+
+  precipChart = new Chart(document.getElementById('precip-chart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Illustrative Precip (mm)',
+        data: precip,
+        backgroundColor: 'rgba(74, 144, 164, 0.7)'
+      }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
+  });
+
+  tempChart = new Chart(document.getElementById('temp-chart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Max', data: tmax, borderColor: '#e76f51', tension: 0.2 },
+        { label: 'Mean', data: tmean, borderColor: '#2a9d8f', tension: 0.2 },
+        { label: 'Min', data: tmin, borderColor: '#4a90a4', tension: 0.2 }
+      ]
+    },
+    options: { responsive: true }
+  });
+}
+
+document.getElementById('load-power').addEventListener('click', loadNasaPower);
+
+// Auto-load on page ready (optional)
+document.addEventListener('DOMContentLoaded', () => {
+  // Small delay so map is ready
+  setTimeout(() => {
+    // Uncomment next line if you want auto-fetch
+    // loadNasaPower();
+  }, 800);
+});
+
+
+// ===== Farmer Priorities (Farmer-Centered Design) =====
+const PRIORITY_MAP = {
+  'water-scarce': {
+    text: 'Limited water / dry spells',
+    favors: ['diverse', 'soil'],
+    note: 'Rotations with deeper roots or better cover can help hold moisture.'
+  },
+  'heavy-rain': {
+    text: 'Heavy rain & erosion',
+    favors: ['diverse', 'soil'],
+    note: 'Keeping living cover longer reduces runoff and soil loss.'
+  },
+  'heat-stress': {
+    text: 'Summer heat stress',
+    favors: ['diverse', 'soil'],
+    note: 'Better soil cover and organic matter can moderate surface heat.'
+  },
+  'limited-equip': {
+    text: 'Limited equipment',
+    favors: ['current'],
+    note: 'Starting with the simplest change (e.g. one cover crop) is often practical.'
+  },
+  'labor-tight': {
+    text: 'Tight labor',
+    favors: ['current', 'diverse'],
+    note: 'Avoid systems that need extra specialized labor until you are ready.'
+  },
+  'no-till': {
+    text: 'Prefer no-till',
+    favors: ['diverse', 'soil'],
+    note: 'Diverse rotations pair well with no-till for soil structure.'
+  },
+  'grain-market': {
+    text: 'Strong grain markets',
+    favors: ['current', 'diverse'],
+    note: 'Corn–soy remains strong; adding a small grain can still fit.'
+  },
+  'forage-market': {
+    text: 'Hay / livestock markets',
+    favors: ['soil'],
+    note: 'Forage or alfalfa phases become more realistic with a market.'
+  },
+  'cash-flow': {
+    text: 'Need steady cash flow',
+    favors: ['current', 'diverse'],
+    note: 'Multi-year forage can delay income — plan carefully with your advisor.'
+  },
+  'build-om': {
+    text: 'Build organic matter',
+    favors: ['soil', 'diverse'],
+    note: 'Living roots and residue are the main drivers of soil organic matter.'
+  },
+  'break-pests': {
+    text: 'Break pest cycles',
+    favors: ['diverse', 'soil'],
+    note: 'A third crop or longer break is often the most effective lever.'
+  },
+  'n-fix': {
+    text: 'Reduce synthetic N',
+    favors: ['soil', 'diverse'],
+    note: 'Legumes and residual N capture can lower fertilizer needs over time.'
+  }
+};
+
+const STRATEGY_NAMES = {
+  current: 'Existing Corn–Soy',
+  diverse: 'Diversified + Small Grain / Cover',
+  soil: 'Soil-Building + Forage / Alfalfa'
+};
+
+document.getElementById('apply-priorities')?.addEventListener('click', () => {
+  const checked = [...document.querySelectorAll('input[name="priority"]:checked')].map(el => el.value);
+  const resultBox = document.getElementById('priority-result');
+  const summary = document.getElementById('priority-summary');
+  const chips = document.getElementById('priority-suggestions');
+
+  if (checked.length === 0) {
+    summary.textContent = 'Please select at least one priority so we can highlight matching ideas.';
+    chips.innerHTML = '';
+    resultBox.hidden = false;
+    return;
+  }
+
+  // Score strategies
+  const scores = { current: 0, diverse: 0, soil: 0 };
+  const notes = [];
+
+  checked.forEach(key => {
+    const info = PRIORITY_MAP[key];
+    if (!info) return;
+    info.favors.forEach(s => scores[s]++);
+    notes.push(info.note);
+  });
+
+  // Rank
+  const ranked = Object.entries(scores)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, score]) => ({ id, score, name: STRATEGY_NAMES[id] }));
+
+  const top = ranked[0];
+  const second = ranked[1];
+
+  let msg = `You selected ${checked.length} priority area(s). `;
+  if (top.score > 0) {
+    msg += `The ideas that line up most closely are <strong>${top.name}</strong>`;
+    if (second && second.score > 0 && second.score >= top.score - 1) {
+      msg += ` and <strong>${second.name}</strong>`;
+    }
+    msg += '.';
+  } else {
+    msg += 'All three rotation options remain worth discussing.';
+  }
+
+  summary.innerHTML = msg;
+
+  chips.innerHTML = ranked
+    .filter(r => r.score > 0)
+    .map((r, i) => `<span class="chip ${i === 0 ? 'best' : ''}">${r.name}</span>`)
+    .join('');
+
+  // Add unique notes
+  const uniqueNotes = [...new Set(notes)].slice(0, 3);
+  if (uniqueNotes.length) {
+    summary.innerHTML += '<br><br><em>Quick takeaways:</em> ' + uniqueNotes.join(' ');
+  }
+
+  resultBox.hidden = false;
+  resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+document.getElementById('reset-priorities')?.addEventListener('click', () => {
+  document.querySelectorAll('input[name="priority"]').forEach(el => el.checked = false);
+  document.getElementById('priority-result').hidden = true;
+});
+
+// ===== AGROINTEL AI Chat =====
+const AGROINTEL_API_BASE = 'https://agrointel-ai-api.vercel.app';
+const AGROINTEL_LOCATION_LABEL = 'Central Iowa, USA (Ames area)';
+
+function addAiMessage(text, kind) {
+  const messages = document.getElementById('ai-chat-messages');
+  if (!messages) return;
+  const msg = document.createElement('div');
+  msg.className = `ai-msg ${kind}`;
+  msg.textContent = text;
+  messages.appendChild(msg);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+async function askAgrointelAi(question) {
+  addAiMessage(question, 'user');
+  const thinking = document.createElement('div');
+  thinking.className = 'ai-msg bot';
+  thinking.textContent = 'Thinking…';
+  document.getElementById('ai-chat-messages').appendChild(thinking);
+  thinking.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const indicatorsRes = await fetch(`${AGROINTEL_API_BASE}/indicators`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // SMAP soil-moisture lookups can take 60s+ for some locations and
+      // time out client-side, so this skips it and relies on POWER-only
+      // indicators (temp/rainfall anomalies, dry spells) which respond in ~1s.
+      body: JSON.stringify({ lat: FARM_LAT, lon: FARM_LON, include_soil_moisture: false })
+    });
+    if (!indicatorsRes.ok) throw new Error(`indicators HTTP ${indicatorsRes.status}`);
+    const indicators = await indicatorsRes.json();
+
+    const chatRes = await fetch(`${AGROINTEL_API_BASE}/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        location_label: AGROINTEL_LOCATION_LABEL,
+        indicators
+      })
+    });
+    if (!chatRes.ok) throw new Error(`chat HTTP ${chatRes.status}`);
+    const chat = await chatRes.json();
+
+    thinking.remove();
+    addAiMessage(chat.answer || 'No answer returned.', 'bot');
+  } catch (err) {
+    console.error(err);
+    thinking.remove();
+    addAiMessage('Something went wrong talking to AGROINTEL AI.', 'error');
+  }
+}
+
+document.getElementById('ai-chat-send')?.addEventListener('click', () => {
+  const input = document.getElementById('ai-chat-input');
+  const question = input.value.trim();
+  if (!question) return;
+  input.value = '';
+  askAgrointelAi(question);
+});
+
+document.getElementById('ai-chat-input')?.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    document.getElementById('ai-chat-send').click();
+  }
+});
