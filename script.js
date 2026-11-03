@@ -907,24 +907,19 @@ let siGridLayer = L.layerGroup().addTo(map);
 let siGridCache = null; // { key, cells: [{lat, lon, south, north, west, east, erosion, water, suitability}] }
 const siLocationCache = new Map(); // boundingBoxKey -> cells
 
-function siBoundingBoxFor(loc) {
-  if (loc.boundingBox) {
-    const { south, north, west, east } = loc.boundingBox;
-    // Cap how large a box we'll grid-sample so a whole continent doesn't
-    // turn into a handful of near-meaningless giant cells; clamp to a
-    // reasonable country/region-sized window centered on the place.
-    const maxSpan = 6; // degrees
-    const latSpan = Math.min(north - south, maxSpan) || 1;
-    const lonSpan = Math.min(east - west, maxSpan) || 1;
-    const cLat = (north + south) / 2;
-    const cLon = (east + west) / 2;
-    return { south: cLat - latSpan / 2, north: cLat + latSpan / 2, west: cLon - lonSpan / 2, east: cLon + lonSpan / 2 };
-  }
-  // Bare point (e.g. default farm): small fixed box around it.
-  return { south: loc.lat - 0.6, north: loc.lat + 0.6, west: loc.lon - 0.6, east: loc.lon + 0.6 };
+function siBoundingBoxFor() {
+  // Sample the map's actual current viewport, not just a box around the
+  // searched point, so the heatmap covers the whole visible map rather
+  // than leaving most of it blank. invalidateSize() first because Leaflet
+  // can still be using a stale (too-small) container size this early in
+  // page load, which otherwise under-reports getBounds() and leaves the
+  // heatmap short of the real edges once layout settles.
+  map.invalidateSize();
+  const b = map.getBounds();
+  return { south: b.getSouth(), north: b.getNorth(), west: b.getWest(), east: b.getEast() };
 }
 
-function siBuildGrid(box, maxPoints = 16) {
+function siBuildGrid(box, maxPoints = 25) {
   const cols = Math.max(2, Math.min(6, Math.round(Math.sqrt(maxPoints))));
   const rows = cols;
   const latStep = (box.north - box.south) / rows;
@@ -1053,7 +1048,9 @@ function siHeatSizingFor(cells) {
   const p0 = map.latLngToContainerPoint([cells[0].lat, cells[0].lon]);
   const p1 = map.latLngToContainerPoint([cells[1].lat, cells[1].lon]);
   const spacing = Math.max(20, Math.hypot(p1.x - p0.x, p1.y - p0.y));
-  return { radius: spacing * 0.9, blur: spacing * 0.7 };
+  // Generous overlap between adjacent points' kernels for smooth, seamless
+  // blending (no visible blob/gap edges) across the whole viewport.
+  return { radius: spacing * 1.15, blur: spacing * 0.95 };
 }
 
 function siRenderGrid(cells, model) {
@@ -1114,9 +1111,20 @@ function siRerenderCurrentModel() {
   siRenderGrid(siGridCache.cells, model);
 }
 
+let siLastLocation = null;
+
 async function updateSuitabilityForLocation(loc) {
+  siLastLocation = loc;
   const status = document.getElementById('si-status');
-  const box = siBoundingBoxFor(loc);
+  const toggle = document.getElementById('si-toggle');
+
+  if (toggle && !toggle.checked) {
+    siGridLayer.clearLayers();
+    if (status) status.textContent = 'Suitability heatmap is off.';
+    return;
+  }
+
+  const box = siBoundingBoxFor();
   const cacheKey = [box.south, box.north, box.west, box.east].map(v => v.toFixed(2)).join(',');
 
   if (siLocationCache.has(cacheKey)) {
@@ -1146,6 +1154,25 @@ async function updateSuitabilityForLocation(loc) {
 
 document.getElementById('si-model-select')?.addEventListener('change', (e) => {
   if (siGridCache) siRenderGrid(siGridCache.cells, e.target.value);
+});
+
+document.getElementById('si-toggle')?.addEventListener('change', (e) => {
+  const status = document.getElementById('si-status');
+  if (!e.target.checked) {
+    siGridLayer.clearLayers();
+    if (status) status.textContent = 'Suitability heatmap is off.';
+    return;
+  }
+  // Re-enabling: re-render from cache if we already have data for the
+  // current view, otherwise fetch fresh for the last searched location.
+  const box = siBoundingBoxFor();
+  const cacheKey = [box.south, box.north, box.west, box.east].map(v => v.toFixed(2)).join(',');
+  if (siLocationCache.has(cacheKey)) {
+    siGridCache = { key: cacheKey, cells: siLocationCache.get(cacheKey) };
+    siRenderGrid(siGridCache.cells, document.getElementById('si-model-select')?.value || 'erosion');
+  } else if (siLastLocation) {
+    updateSuitabilityForLocation(siLastLocation);
+  }
 });
 
 // Initial grid for the default sample farm.
