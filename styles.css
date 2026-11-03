@@ -864,65 +864,153 @@ footer .small {
   color: var(--text-muted);
 }
 
-/* ===== AGROINTEL AI Chat ===== */
-.ai-chat-card {
-  background: var(--card);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 1.25rem;
-  margin-top: 1rem;
+
+/* ===== Place search ===== */
+.search-label input#place-search {
+  min-width: 160px;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.95rem;
 }
 
-.ai-chat-messages {
-  max-height: 320px;
+/* ===== Chatbot ===== */
+.chatbot {
+  position: fixed;
+  bottom: 1.25rem;
+  right: 1.25rem;
+  z-index: 9999;
+  font-family: var(--font);
+}
+
+.chat-toggle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green-700);
+  color: white;
+  font-size: 1.4rem;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  transition: transform 0.15s, background 0.15s;
+}
+
+.chat-toggle:hover {
+  transform: scale(1.06);
+  background: var(--green-500);
+}
+
+.chat-panel {
+  position: absolute;
+  bottom: 70px;
+  right: 0;
+  width: 340px;
+  max-width: calc(100vw - 2rem);
+  height: 420px;
+  background: white;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chat-panel[hidden] {
+  display: none;
+}
+
+.chat-header {
+  background: var(--green-700);
+  color: white;
+  padding: 0.75rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.chat-close {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 1.4rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.chat-messages {
+  flex: 1;
   overflow-y: auto;
+  padding: 0.9rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  padding: 0.5rem 0.25rem;
-  margin-bottom: 1rem;
+  background: #f7f9f7;
 }
 
-.ai-msg {
-  max-width: 85%;
-  padding: 0.6rem 0.9rem;
-  border-radius: var(--radius);
-  font-size: 0.95rem;
-  line-height: 1.5;
+.chat-msg {
+  max-width: 90%;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
-.ai-msg.bot {
-  background: var(--green-100);
-  color: var(--green-900);
+.chat-msg.bot {
+  background: white;
+  border: 1px solid #e0ebe3;
   align-self: flex-start;
 }
 
-.ai-msg.user {
-  background: var(--green-700);
+.chat-msg.bot p {
+  margin: 0 0 0.5rem;
+}
+
+.chat-msg.bot p:last-child {
+  margin-bottom: 0;
+}
+
+.chat-msg.bot ul,
+.chat-msg.bot ol {
+  margin: 0 0 0.5rem;
+  padding-left: 1.1rem;
+}
+
+.chat-msg.bot li {
+  margin-bottom: 0.25rem;
+}
+
+.chat-msg.bot li:last-child {
+  margin-bottom: 0;
+}
+
+.chat-msg.bot strong {
+  color: var(--green-700);
+}
+
+.chat-msg.user {
+  background: var(--green-500);
   color: white;
   align-self: flex-end;
 }
 
-.ai-msg.error {
-  background: #fde2e2;
-  color: #a33;
-  align-self: flex-start;
-}
-
-.ai-chat-input-area {
+.chat-input-row {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.4rem;
+  padding: 0.65rem;
+  border-top: 1px solid #eee;
+  background: white;
 }
 
-.ai-chat-input-area input {
+.chat-input-row input {
   flex: 1;
-  padding: 0.65rem 0.9rem;
-  border-radius: var(--radius);
-  border: 1px solid #ccd8cf;
-  font-size: 0.95rem;
-  font-family: var(--font);
+  padding: 0.5rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 0.9rem;
 }
 
-.ai-chat-input-area input:focus {
-  outline: 2px solid var(--green-300);
+.chat-input-row .btn {
+  flex-shrink: 0;
 }

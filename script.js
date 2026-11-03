@@ -67,7 +67,7 @@ const markers = [];
 
 function updateGibsLayer() {
   const layerName = document.getElementById('gibs-layer').value;
-  const dateStr = document.getElementById('gibs-date').value || '2024-07-15';
+  const dateStr = document.getElementById('gibs-date').value || '2025-07-15';
   const format = gibsLayers[layerName] || 'jpg';
 
   if (currentGibs) {
@@ -583,40 +583,311 @@ document.getElementById('reset-priorities')?.addEventListener('click', () => {
   document.getElementById('priority-result').hidden = true;
 });
 
-// ===== AGROINTEL AI Chat =====
+
+
+// ===== Place search (Nominatim) =====
+async function searchPlace(query) {
+  if (!query || !query.trim()) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    const data = await res.json();
+    if (data && data[0]) {
+      return {
+        lat: parseFloat(data[0].lat),
+        lon: parseFloat(data[0].lon),
+        name: data[0].display_name
+      };
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return null;
+}
+
+document.getElementById('search-place-btn')?.addEventListener('click', async () => {
+  const q = document.getElementById('place-search')?.value;
+  const result = await searchPlace(q);
+  if (result) {
+    map.setView([result.lat, result.lon], 11);
+    L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
+  } else {
+    alert('Place not found. Try a city or country name.');
+  }
+});
+
+document.getElementById('place-search')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('search-place-btn')?.click();
+});
+
+// ===== Chatbot =====
+const chatPanel = document.getElementById('chat-panel');
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+
+document.getElementById('chat-toggle')?.addEventListener('click', () => {
+  if (chatPanel) chatPanel.hidden = !chatPanel.hidden;
+});
+document.getElementById('chat-close')?.addEventListener('click', () => {
+  if (chatPanel) chatPanel.hidden = true;
+});
+
+function addChatMsg(text, who = 'bot') {
+  if (!chatMessages) return;
+  const div = document.createElement('div');
+  div.className = `chat-msg ${who}`;
+  div.innerHTML = text;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function setGibsLayerByKeyword(keyword) {
+  const select = document.getElementById('gibs-layer');
+  if (!select) return false;
+  const mapKw = {
+    'true color': 'MODIS_Terra_CorrectedReflectance_TrueColor',
+    'truecolor': 'MODIS_Terra_CorrectedReflectance_TrueColor',
+    'terra': 'MODIS_Terra_CorrectedReflectance_TrueColor',
+    'aqua': 'MODIS_Aqua_CorrectedReflectance_TrueColor',
+    'viirs': 'VIIRS_SNPP_CorrectedReflectance_TrueColor',
+    'ndvi': 'MODIS_Terra_NDVI_8Day',
+    'vegetation': 'MODIS_Terra_NDVI_8Day',
+    'temp': 'MODIS_Terra_Land_Surface_Temp_Day',
+    'temperature': 'MODIS_Terra_Land_Surface_Temp_Day',
+    'heat': 'MODIS_Terra_Land_Surface_Temp_Day',
+    'bands': 'MODIS_Terra_CorrectedReflectance_Bands721',
+    'ag': 'MODIS_Terra_CorrectedReflectance_Bands721',
+    'rain': 'MODIS_Terra_CorrectedReflectance_TrueColor', // visual proxy
+    'wind': 'MODIS_Terra_CorrectedReflectance_TrueColor'
+  };
+  const key = Object.keys(mapKw).find(k => keyword.includes(k));
+  if (key) {
+    select.value = mapKw[key];
+    updateGibsLayer();
+    return mapKw[key];
+  }
+  return false;
+}
+
+function toggleOverlay(name, on) {
+  const ids = {
+    erosion: 'overlay-erosion',
+    water: 'overlay-water',
+    frost: 'overlay-frost'
+  };
+  const el = document.getElementById(ids[name]);
+  if (!el) return false;
+  el.checked = on !== undefined ? on : !el.checked;
+  el.dispatchEvent(new Event('change'));
+  return true;
+}
+
+async function handleChatCommand(raw) {
+  const text = (raw || '').trim().toLowerCase();
+  if (!text) return;
+
+  // Place search / go to
+  if (text.startsWith('go to ') || text.startsWith('search ') || text.startsWith('find ') || text.startsWith('show map of ')) {
+    const q = text.replace(/^(go to|search|find|show map of)\s+/i, '');
+    addChatMsg(`Searching for <strong>${q}</strong>…`);
+    const result = await searchPlace(q);
+    if (result) {
+      map.setView([result.lat, result.lon], 11);
+      L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
+      const searchInput = document.getElementById('place-search');
+      if (searchInput) searchInput.value = q;
+      addChatMsg(`Centered map on <strong>${result.name}</strong>.`);
+    } else {
+      addChatMsg('Sorry, I could not find that place. Try a city or country name.');
+    }
+    return;
+  }
+
+  // Every remaining command below is a short, non-question control phrase
+  // (e.g. "show ndvi", "erosion", "rotations"). A real question — one with
+  // a "?" or more than a few words, like "what's the best rotation
+  // strategy here?" — skips all of these and falls through to the real AI
+  // at the end of this function instead of being misread as a command.
+  const isNavPhrase = !text.includes('?') && text.split(/\s+/).length <= 4;
+
+  // Center farm
+  if (isNavPhrase && (text.includes('center farm') || (text.includes('iowa') && text.includes('farm')) || text === 'home')) {
+    map.setView([FARM_LAT, FARM_LON], 12);
+    addChatMsg('Centered on the sample farm near Ames, Iowa.');
+    return;
+  }
+
+  // Layer commands
+  if (isNavPhrase && (text.includes('show ndvi') || text.includes('vegetation') || text.includes('greenness'))) {
+    setGibsLayerByKeyword('ndvi');
+    addChatMsg('Switched to <strong>MODIS NDVI</strong> (vegetation health). Green = more vigorous crops.');
+    return;
+  }
+  if (isNavPhrase && (text.includes('show temp') || text.includes('heat') || text.includes('temperature'))) {
+    setGibsLayerByKeyword('temp');
+    addChatMsg('Switched to <strong>Land Surface Temperature</strong>. Useful for heat-stress patterns.');
+    return;
+  }
+  if (isNavPhrase && (text.includes('true color') || text.includes('satellite photo') || text.includes('show rain') || text.includes('show wind'))) {
+    setGibsLayerByKeyword('true color');
+    if (text.includes('rain')) {
+      addChatMsg('Showing <strong>True Color</strong> imagery. For rainfall patterns, also check the Climate charts section and the scenario slider (rainfall %). Real-time rain radar is not embedded, but NASA GPM concepts are described in the trends.');
+    } else if (text.includes('wind')) {
+      addChatMsg('Showing <strong>True Color</strong>. Wind direction is not a GIBS layer here; use local weather services for wind. The map is centered for land/crop view.');
+    } else {
+      addChatMsg('Switched to <strong>True Color</strong> satellite view.');
+    }
+    return;
+  }
+  if (isNavPhrase && (text.includes('bands') || text.includes('agriculture layer'))) {
+    setGibsLayerByKeyword('bands');
+    addChatMsg('Switched to <strong>MODIS Bands 7-2-1</strong> (useful agriculture false-color view).');
+    return;
+  }
+
+  // Overlays
+  if (isNavPhrase && text.includes('erosion')) {
+    toggleOverlay('erosion', true);
+    addChatMsg('Turned <strong>erosion risk</strong> overlay ON. Red zones mark higher risk areas on the sample farm.');
+    return;
+  }
+  if (isNavPhrase && (text.includes('water stress') || text.includes('water-stress') || text.includes('drought'))) {
+    toggleOverlay('water', true);
+    addChatMsg('Turned <strong>water-stress hotspots</strong> ON (blue circles).');
+    return;
+  }
+  if (isNavPhrase && text.includes('frost')) {
+    toggleOverlay('frost', true);
+    addChatMsg('Turned <strong>frost-prone</strong> overlay ON (purple).');
+    return;
+  }
+  if (isNavPhrase && (text.includes('hide overlays') || text.includes('clear overlays'))) {
+    toggleOverlay('erosion', false);
+    toggleOverlay('water', false);
+    toggleOverlay('frost', false);
+    addChatMsg('All vulnerability overlays turned off.');
+    return;
+  }
+
+  // Sections navigation
+  if (isNavPhrase && text.includes('priorit')) {
+    document.getElementById('priorities')?.scrollIntoView({ behavior: 'smooth' });
+    addChatMsg('Scrolled to <strong>Your Farm Priorities</strong>. Tick what matters on your farm.');
+    return;
+  }
+  if (isNavPhrase && (text.includes('rotation') || text.includes('strateg'))) {
+    document.getElementById('strategies')?.scrollIntoView({ behavior: 'smooth' });
+    addChatMsg('Scrolled to <strong>Rotation Strategies</strong>. Compare Corn–Soy, Diversified, and Soil-Building options.');
+    return;
+  }
+  if (isNavPhrase && (text.includes('climate') || text.includes('chart') || text.includes('rainfall') || text.includes('temperature data'))) {
+    document.getElementById('climate')?.scrollIntoView({ behavior: 'smooth' });
+    addChatMsg('Scrolled to <strong>Climate & Soil</strong>. Click “Load NASA POWER Data” for real temperature and precipitation.');
+    return;
+  }
+  if (isNavPhrase && text.includes('map')) {
+    document.getElementById('map-section')?.scrollIntoView({ behavior: 'smooth' });
+    addChatMsg('Scrolled to the <strong>map</strong>. You can search any place, change layers, and toggle risk overlays.');
+    return;
+  }
+
+  // Help / about
+  if (isNavPhrase && (text.includes('help') || text === '?' || text.includes('what can you'))) {
+    addChatMsg(`I can control this page. Try:<br>
+      • <em>go to [place]</em> — e.g. "go to Nebraska"<br>
+      • <em>show NDVI</em> / <em>show temperature</em> / <em>true color</em><br>
+      • <em>show erosion</em> / <em>water stress</em> / <em>frost</em><br>
+      • <em>center farm</em><br>
+      • <em>rotations</em> / <em>priorities</em> / <em>climate</em><br>
+      Ask about crop rotations or soil health too.`);
+    return;
+  }
+
+  // Anything else is a real question for the AGROINTEL AI assistant,
+  // grounded in this farm's real NASA-derived indicators.
+  await askAgrointelAi(raw);
+}
+
+// ===== AGROINTEL AI (real, Gemini-backed, grounded in real NASA data) =====
 const AGROINTEL_API_BASE = 'https://agrointel-ai-api.vercel.app';
 const AGROINTEL_LOCATION_LABEL = 'Central Iowa, USA (Ames area)';
 
-function addAiMessage(text, kind) {
-  const messages = document.getElementById('ai-chat-messages');
-  if (!messages) return;
-  const msg = document.createElement('div');
-  msg.className = `ai-msg ${kind}`;
-  msg.textContent = text;
-  messages.appendChild(msg);
-  messages.scrollTop = messages.scrollHeight;
-}
+// Indicators only depend on the farm's fixed location, so fetch them once
+// and reuse for every question instead of re-fetching on each message.
+let agrointelIndicatorsPromise = null;
 
-async function askAgrointelAi(question) {
-  addAiMessage(question, 'user');
-  const thinking = document.createElement('div');
-  thinking.className = 'ai-msg bot';
-  thinking.textContent = 'Thinking…';
-  document.getElementById('ai-chat-messages').appendChild(thinking);
-  thinking.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  try {
-    const indicatorsRes = await fetch(`${AGROINTEL_API_BASE}/indicators`, {
+function getAgrointelIndicators() {
+  if (!agrointelIndicatorsPromise) {
+    agrointelIndicatorsPromise = fetch(`${AGROINTEL_API_BASE}/indicators`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // SMAP soil-moisture lookups can take 60s+ for some locations and
       // time out client-side, so this skips it and relies on POWER-only
       // indicators (temp/rainfall anomalies, dry spells) which respond in ~1s.
       body: JSON.stringify({ lat: FARM_LAT, lon: FARM_LON, include_soil_moisture: false })
+    }).then(res => {
+      if (!res.ok) throw new Error(`indicators HTTP ${res.status}`);
+      return res.json();
+    }).catch(err => {
+      agrointelIndicatorsPromise = null; // allow retry on next question
+      throw err;
     });
-    if (!indicatorsRes.ok) throw new Error(`indicators HTTP ${indicatorsRes.status}`);
-    const indicators = await indicatorsRes.json();
+  }
+  return agrointelIndicatorsPromise;
+}
 
+// Turns the AI's plain-text answer (markdown-ish: **bold**, "- " bullets,
+// blank-line paragraphs) into clean, readable HTML instead of dumping raw
+// asterisks on screen.
+function formatAiAnswer(text) {
+  const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inline = (s) => escapeHtml(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, '<em>$1</em>');
+
+  // Walk line by line (not blank-line blocks) so a bullet list that starts
+  // right under a heading line, with no blank line between them, still
+  // becomes a real <ul>/<ol> instead of a paragraph with literal "* " in it.
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
+  const html = [];
+  let listItems = null; // { tag: 'ul'|'ol', items: [...] }
+
+  const flushList = () => {
+    if (listItems) {
+      html.push(`<${listItems.tag}>${listItems.items.map(i => `<li>${inline(i)}</li>`).join('')}</${listItems.tag}>`);
+      listItems = null;
+    }
+  };
+
+  lines.forEach(line => {
+    const bulletMatch = line.match(/^[-*•]\s+(.*)/);
+    const numberedMatch = line.match(/^\d+[.)]\s+(.*)/);
+
+    if (bulletMatch) {
+      if (!listItems || listItems.tag !== 'ul') { flushList(); listItems = { tag: 'ul', items: [] }; }
+      listItems.items.push(bulletMatch[1]);
+    } else if (numberedMatch) {
+      if (!listItems || listItems.tag !== 'ol') { flushList(); listItems = { tag: 'ol', items: [] }; }
+      listItems.items.push(numberedMatch[1]);
+    } else {
+      flushList();
+      html.push(`<p>${inline(line)}</p>`);
+    }
+  });
+  flushList();
+
+  return html.join('');
+}
+
+async function askAgrointelAi(question) {
+  const thinking = document.createElement('div');
+  thinking.className = 'chat-msg bot';
+  thinking.textContent = 'Thinking…';
+  chatMessages.appendChild(thinking);
+  thinking.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  try {
+    const indicators = await getAgrointelIndicators();
     const chatRes = await fetch(`${AGROINTEL_API_BASE}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -630,24 +901,23 @@ async function askAgrointelAi(question) {
     const chat = await chatRes.json();
 
     thinking.remove();
-    addAiMessage(chat.answer || 'No answer returned.', 'bot');
+    addChatMsg(formatAiAnswer(chat.answer || 'No answer returned.'), 'bot');
   } catch (err) {
     console.error(err);
     thinking.remove();
-    addAiMessage('Something went wrong talking to AGROINTEL AI.', 'error');
+    addChatMsg('Sorry, something went wrong talking to AGROINTEL AI. Please try again in a moment.', 'bot');
   }
 }
 
-document.getElementById('ai-chat-send')?.addEventListener('click', () => {
-  const input = document.getElementById('ai-chat-input');
-  const question = input.value.trim();
-  if (!question) return;
-  input.value = '';
-  askAgrointelAi(question);
-});
+function sendChat() {
+  const val = chatInput?.value?.trim();
+  if (!val) return;
+  addChatMsg(val, 'user');
+  chatInput.value = '';
+  handleChatCommand(val);
+}
 
-document.getElementById('ai-chat-input')?.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    document.getElementById('ai-chat-send').click();
-  }
+document.getElementById('chat-send')?.addEventListener('click', sendChat);
+chatInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') sendChat();
 });

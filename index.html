@@ -58,26 +58,6 @@
     </div>
   </nav>
 
-  <!-- AGROINTEL AI Assistant -->
-  <section id="ai-assistant" class="section ai-section">
-    <div class="container">
-      <h2><i class="fas fa-robot"></i> Ask AGROINTEL AI</h2>
-      <p class="section-desc">
-        Ask a question about the best crop rotation for the sample Iowa farm above. Answers are grounded in
-        real NASA Earth-observation indicators computed for this exact location — not a generic chatbot.
-      </p>
-      <div class="ai-chat-card">
-        <div id="ai-chat-messages" class="ai-chat-messages">
-          <div class="ai-msg bot">Ask a question above to get a grounded answer from AGROINTEL AI about this location's real NASA data.</div>
-        </div>
-        <div class="ai-chat-input-area">
-          <input type="text" id="ai-chat-input" placeholder="e.g. Is a diversified rotation worth it here given recent rainfall?" />
-          <button id="ai-chat-send" class="btn primary"><i class="fas fa-paper-plane"></i> Ask</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- Location & Farm Context -->
   <section class="section context-section">
     <div class="container">
@@ -197,13 +177,17 @@
           </select>
         </label>
         <label>Date:
-          <input type="date" id="gibs-date" value="2024-07-15" />
+          <input type="date" id="gibs-date" value="2025-07-15" />
         </label>
         <label>Opacity:
           <input type="range" id="layer-opacity" min="0.2" max="1" step="0.05" value="0.75" />
         </label>
         <button id="update-layer" class="btn small"><i class="fas fa-sync"></i> Update</button>
         <button id="locate-farm" class="btn small secondary"><i class="fas fa-crosshairs"></i> Center Farm</button>
+        <label class="search-label">Search place:
+          <input type="text" id="place-search" placeholder="City, farm, country..." />
+        </label>
+        <button id="search-place-btn" class="btn small"><i class="fas fa-search"></i> Go</button>
       </div>
 
       <div class="map-layout">
@@ -595,6 +579,31 @@
       <p class="small">Not an official NASA product. For educational and exploratory purposes.</p>
     </div>
   </footer>
+
+
+  <!-- Chatbot -->
+  <div id="chatbot" class="chatbot">
+    <button id="chat-toggle" class="chat-toggle" aria-label="Open chat">
+      <i class="fas fa-comments"></i>
+    </button>
+    <div id="chat-panel" class="chat-panel" hidden>
+      <div class="chat-header">
+        <span><i class="fas fa-robot"></i> CropRot Assistant</span>
+        <button id="chat-close" class="chat-close">&times;</button>
+      </div>
+      <div id="chat-messages" class="chat-messages">
+        <div class="chat-msg bot">
+          Hi! I can help you explore the map and rotations.<br>
+          Try: <em>"go to Iowa"</em>, <em>"show rain"</em>, <em>"show NDVI"</em>,
+          <em>"center farm"</em>, <em>"show erosion"</em>, or ask about rotations.
+        </div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" placeholder="Type a command or question..." />
+        <button id="chat-send" class="btn small primary">Send</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
