@@ -20,6 +20,37 @@ function showToast(message) {
 }
 
 /* ==========================================================
+   Theme toggle — light / dark / system, cycled by one button
+   ========================================================== */
+const THEME_STORE = "agro_theme";
+const themeToggle = $("#themeToggle");
+
+function applyTheme(mode) {
+  if (mode === "light" || mode === "dark") {
+    document.documentElement.setAttribute("data-theme", mode);
+  } else {
+    document.documentElement.removeAttribute("data-theme"); // "system"
+  }
+  if (themeToggle) themeToggle.dataset.mode = mode;
+}
+
+function currentThemeMode() {
+  const saved = localStorage.getItem(THEME_STORE);
+  return saved === "light" || saved === "dark" ? saved : "system";
+}
+
+applyTheme(currentThemeMode());
+
+themeToggle?.addEventListener("click", () => {
+  const order = ["light", "dark", "system"];
+  const next = order[(order.indexOf(currentThemeMode()) + 1) % order.length];
+  if (next === "system") localStorage.removeItem(THEME_STORE);
+  else localStorage.setItem(THEME_STORE, next);
+  applyTheme(next);
+  showToast(`Theme: ${next === "system" ? "Match system" : next === "dark" ? "Dark" : "Light"}`);
+});
+
+/* ==========================================================
    Announcement bar + navbar
    ========================================================== */
 const announceClose = $("#announceClose");
@@ -118,35 +149,6 @@ cropFilters.forEach((btn) => {
     });
   });
 });
-
-/* ==========================================================
-   Final CTA → hand off to get-started.html with details
-   ========================================================== */
-const ctaForm = $("#ctaForm");
-const ctaEmail = $("#ctaEmail");
-const ctaFarmSize = $("#ctaFarmSize");
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-if (ctaForm) {
-  ctaForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const email = ctaEmail.value.trim();
-    const size = ctaFarmSize.value;
-
-    if (!EMAIL_RE.test(email)) {
-      ctaEmail.focus();
-      showToast("Enter a valid work email (e.g. you@greenharvest.coop).");
-      return;
-    }
-    if (!size) {
-      ctaFarmSize.focus();
-      showToast("Please pick your farm size.");
-      return;
-    }
-    const params = new URLSearchParams({ email, size });
-    window.location.href = `get-started.html?${params.toString()}`;
-  });
-}
 
 /* ==========================================================
    NASA Live — map, suitability overlay, POWER climate charts

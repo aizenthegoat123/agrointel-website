@@ -11,6 +11,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css" />
+  <script>
+    // Applies the saved theme before first paint, so there's no light-mode
+    // flash on load if the user picked dark (or dark is picked for them by
+    // the OS). "system" (the default) stores no attribute at all - the
+    // prefers-color-scheme media query in styles.css handles that case.
+    (function () {
+      var saved = localStorage.getItem("agro_theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    })();
+  </script>
 </head>
 <body id="top">
 
@@ -48,10 +60,11 @@
       </nav>
 
       <div class="nav-cta">
-        <a href="get-started.html?mode=signin" class="btn btn-ghost btn-sm hide-sm">Sign in</a>
-        <a href="get-started.html?mode=signin" class="btn btn-primary btn-sm">Get started
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
-        </a>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Change color theme">
+          <svg class="theme-icon theme-icon-light" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 4a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1zm0 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm8 3a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2h1zM5 11a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2h1zm12.95-6.36a1 1 0 0 1 0 1.41l-.7.71a1 1 0 1 1-1.42-1.41l.71-.71a1 1 0 0 1 1.41 0zM8.17 15.54a1 1 0 0 1 0 1.41l-.71.71a1 1 0 1 1-1.41-1.41l.7-.71a1 1 0 0 1 1.42 0zm9.49 1.41a1 1 0 0 1-1.42 1.41l-.7-.71a1 1 0 1 1 1.41-1.41l.71.71zM7.46 6.46a1 1 0 0 1-1.41-1.41l.7-.71A1 1 0 1 1 8.18 5.75l-.71.71zM12 18a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1z"/></svg>
+          <svg class="theme-icon theme-icon-dark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M20.7 14.9A8.5 8.5 0 0 1 9.1 3.3a1 1 0 0 0-1.2-1.3A10.5 10.5 0 1 0 22 16.1a1 1 0 0 0-1.3-1.2z"/></svg>
+          <svg class="theme-icon theme-icon-system" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1h-6l1 2.5V20h1a1 1 0 1 1 0 2H8a1 1 0 1 1 0-2h1v-1.5L10 16H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v9h14V6z"/></svg>
+        </button>
         <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="navLinks">
           <span></span><span></span><span></span>
         </button>
@@ -68,10 +81,7 @@
           <h1 class="display">See what your crops need, <em>before</em> they tell you.</h1>
           <p class="lede">AgroIntel fuses <strong>NASA satellite imagery</strong>, <strong>NASA POWER climate records</strong> and a <strong>Gemini-powered agronomist</strong> — so you catch disease weeks earlier, irrigate with root-zone wetness data and spray only when it counts.</p>
           <div class="hero-ctas">
-            <a href="get-started.html" class="btn btn-primary btn-lg">Start free trial
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
-            </a>
-            <a href="#analysis" class="btn btn-outline btn-lg">
+            <a href="#analysis" class="btn btn-primary btn-lg">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-2zm4 6h8v2H8zm0-3.5h8v2H8z"/></svg>
               Ask Agro — live AI
             </a>
@@ -642,36 +652,43 @@
     </section>
 
     <!-- ============ FINAL CTA ============ -->
-    <section class="section cta-section" id="cta">
+    <section class="section cta-section" id="data-sources">
       <div class="container">
         <div class="cta-panel">
           <div class="cta-glow" aria-hidden="true"></div>
           <div class="cta-copy">
-            <span class="eyebrow light">Early access · Kharif 2026 cohort</span>
-            <h2>Your next season starts <em>smarter</em>.</h2>
-            <p>Join 12,000+ growers using AgroIntel to see disease first, spray less and harvest more.</p>
-            <ul class="cta-points">
-              <li><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> Free 14-day Grower trial</li>
-              <li><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> No credit card required</li>
-              <li><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> Cancel anytime, export anytime</li>
+            <span class="eyebrow light">Real data, not guesses</span>
+            <h2>Every number on this page traces back to <em>open NASA data</em>.</h2>
+            <p>No fabricated stats, no simulated sensors. Here's exactly what's behind the map, the charts and Ask Agro.</p>
+          </div>
+          <div class="data-card">
+            <ul class="data-list">
+              <li>
+                <span class="data-dot" aria-hidden="true"></span>
+                <div><strong>NASA GIBS · MODIS Terra/Aqua</strong><p>True-color and NDVI 8-Day satellite imagery, browsable by date.</p></div>
+              </li>
+              <li>
+                <span class="data-dot" aria-hidden="true"></span>
+                <div><strong>NASA POWER (Agroclimatology)</strong><p>Daily temperature, precipitation and root-zone soil wetness (GWETROOT) — live for any location.</p></div>
+              </li>
+              <li>
+                <span class="data-dot" aria-hidden="true"></span>
+                <div><strong>NASA Worldview</strong><p>Reference imagery for cross-checking what the map shows.</p></div>
+              </li>
+              <li>
+                <span class="data-dot" aria-hidden="true"></span>
+                <div><strong>Esri World Imagery</strong><p>High-resolution satellite basemap under the NASA overlay.</p></div>
+              </li>
+              <li>
+                <span class="data-dot" aria-hidden="true"></span>
+                <div><strong>OpenStreetMap Nominatim</strong><p>Free place search and geocoding for any location you search.</p></div>
+              </li>
+              <li>
+                <span class="data-dot" aria-hidden="true"></span>
+                <div><strong>Google Gemini, via our AGROINTEL AI backend</strong><p>Ask Agro — grounded in the real indicators above, not canned replies.</p></div>
+              </li>
             </ul>
           </div>
-          <form class="cta-form" id="ctaForm" novalidate>
-            <label for="ctaEmail" class="cta-label">Work email</label>
-            <input type="email" id="ctaEmail" name="email" placeholder="you@greenharvest.coop" required />
-            <label for="ctaFarmSize" class="cta-label">Farm size</label>
-            <select id="ctaFarmSize" name="farmSize" required>
-              <option value="" selected disabled>Select…</option>
-              <option value="small">Under 25 acres / 10 ha</option>
-              <option value="medium">25–250 acres / 10–100 ha</option>
-              <option value="large">250–2,500 acres / 100–1,000 ha</option>
-              <option value="estate">2,500+ acres / co-op or estate</option>
-            </select>
-            <button type="submit" class="btn btn-lime btn-block btn-lg">Get early access
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
-            </button>
-            <p class="cta-micro">We’ll carry these over — no retyping. No spam, ever.</p>
-          </form>
         </div>
       </div>
     </section>
