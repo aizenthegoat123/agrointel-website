@@ -500,16 +500,30 @@ if (ctaForm) {
   map.on("blur", () => map.scrollWheelZoom.disable());
 
   const farmIcon = L.divIcon({ className: "", html: '<div class="farm-marker"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
-  L.marker([FARM.lat, FARM.lon], { icon: farmIcon, title: FARM.name })
+  let homeFarmMarker = L.marker([FARM.lat, FARM.lon], { icon: farmIcon, title: FARM.name })
     .bindPopup(`<strong>${FARM.name}</strong><br>5 blocks · 214 ha · pairs Sentinel-2 with MODIS.<br>Click a block marker for field intel.`)
     .addTo(map);
 
-  BLOCK_MARKERS.forEach((b) => {
-    const icon = L.divIcon({ className: "", html: '<div class="block-marker"></div>', iconSize: [13, 13], iconAnchor: [6.5, 6.5] });
-    L.marker(b.pos, { icon, title: `Block ${b.id} · ${b.crop}` })
-      .bindPopup(`<strong>Block ${b.id} · ${b.crop}</strong><br>NDVI ${b.ndvi} — ${b.note}`)
-      .addTo(map);
-  });
+  // Which place the suitability heatmap/block markers below are currently
+  // showing. Starts on the home sample farm; a place search below moves it.
+  let activeLocation = { lat: FARM.lat, lon: FARM.lon, name: FARM.name, isHome: true };
+  let activeBlocks = BLOCK_MARKERS;
+  let activeSuitBounds = null; // set once SUIT_BOUNDS is declared below
+
+  const blockMarkerLayer = L.layerGroup().addTo(map);
+  function renderBlockMarkers(blocks, isHome) {
+    blockMarkerLayer.clearLayers();
+    blocks.forEach((b) => {
+      const icon = L.divIcon({ className: "", html: '<div class="block-marker"></div>', iconSize: [13, 13], iconAnchor: [6.5, 6.5] });
+      const popup = isHome
+        ? `<strong>Block ${b.id} · ${b.crop}</strong><br>NDVI ${b.ndvi} — ${b.note}`
+        : `<strong>Sample point ${b.id}</strong><br>Generic cropland assumption for this location — no specific crop identified here.`;
+      L.marker(b.pos, { icon, title: isHome ? `Block ${b.id} · ${b.crop}` : `Sample point ${b.id}` })
+        .bindPopup(popup)
+        .addTo(blockMarkerLayer);
+    });
+  }
+  renderBlockMarkers(activeBlocks, true);
 
   /* Base map toggle — labels ride along on satellite imagery */
   const layerLabels = $("#layerLabels");
@@ -590,12 +604,23 @@ if (ctaForm) {
   map.on("zoomend", applyNasaOpacity);
   applyNasaOpacity();
 
-  /* Center farm */
+  /* Center farm — also restores the home farm's suitability heatmap/blocks
+     if a search had moved them elsewhere. */
   $("#centerFarmBtn").addEventListener("click", () => {
     map.flyTo([FARM.lat, FARM.lon], FARM.zoom, { duration: 0.8 });
+    if (!activeLocation.isHome) {
+      activeLocation = { lat: FARM.lat, lon: FARM.lon, name: FARM.name, isHome: true };
+      activeBlocks = BLOCK_MARKERS;
+      activeSuitBounds = SUIT_BOUNDS;
+      renderBlockMarkers(activeBlocks, true);
+      refreshSuitability();
+    }
   });
 
-  /* Place search — OpenStreetMap Nominatim (free, no key) */
+  /* Place search — OpenStreetMap Nominatim (free, no key). Moving to a new
+     place now also relocates the suitability heatmap and sample-point
+     markers there (previously they stayed fixed over the home farm no
+     matter what was searched — see PLAN.md for the bug report). */
   const searchForm = $("#placeSearchForm");
   const searchInput = $("#placeSearch");
   let searchMarker = null;
@@ -613,41 +638,77 @@ if (ctaForm) {
         showToast("Place not found — try a different spelling.");
         return;
       }
-      const { lat, lon, display_name } = results[0];
+      const { lat, lon, display_name, boundingbox } = results[0];
       const target = [parseFloat(lat), parseFloat(lon)];
       if (searchMarker) map.removeLayer(searchMarker);
       const label = display_name.length > 70 ? display_name.slice(0, 70) + "…" : display_name;
       searchMarker = L.marker(target).bindPopup(`<strong>${label}</strong>`).addTo(map);
       searchMarker.openPopup();
       map.flyTo(target, 9, { duration: 1 });
+      // boundingbox is [south, north, west, east] as strings, when present
+      const bbox = boundingbox && boundingbox.length === 4
+        ? { south: parseFloat(boundingbox[0]), north: parseFloat(boundingbox[1]), west: parseFloat(boundingbox[2]), east: parseFloat(boundingbox[3]) }
+        : null;
+      focusSuitabilityOn(parseFloat(lat), parseFloat(lon), label, bbox);
     } catch {
       showToast("Search unavailable right now — check your connection.");
     }
   });
 
   /* ---- Suitability heatmap, rendered on a canvas image overlay ----
-     Computed from the real NASA POWER daily record (same fetch that
-     drives the climate charts below) plus a documented per-crop growth
-     calendar/sensitivity table - never a fixed, hand-painted picture.
+     Computed from a real NASA POWER daily record plus a documented
+     per-crop growth calendar/sensitivity table - never a fixed,
+     hand-painted picture. Follows whatever place is actually focused
+     (activeLocation/activeBlocks/activeSuitBounds, set above and by
+     focusSuitabilityOn() below) instead of always the home farm.
      See GOALS.md/PLAN.md in the agrointel-ai project for why. */
   const SUIT_BOUNDS = [[41.945, -93.665], [42.085, -93.435]];
+  activeSuitBounds = SUIT_BOUNDS;
 
-  // Real daily POWER series {T2M, T2M_MAX, PRECTOTCORR, GWETROOT: {"YYYYMMDD": value}},
-  // populated once loadPowerData() below succeeds. Kept around (unlike the
-  // monthly chart aggregates) so the heatmap can look up real values for
-  // any selected date.
+  // Real daily POWER series {T2M, T2M_MAX, PRECTOTCORR, GWETROOT: {"YYYYMMDD": value}}.
+  // powerDaily is the home farm's (populated once loadPowerData() below
+  // succeeds); locationPowerCache holds one per searched location, fetched
+  // on demand so the heatmap can look up real values for any place/date.
   let powerDaily = null;
+  const locationPowerCache = new Map(); // "lat,lon" -> Promise<series>
+
+  async function fetchPowerDailyFor(lat, lon) {
+    const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    if (locationPowerCache.has(key)) return locationPowerCache.get(key);
+    const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M_MAX,T2M,PRECTOTCORR,GWETROOT&community=AG&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&start=20230101&end=20241231&format=JSON`;
+    const promise = fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`POWER HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        const params = data?.properties?.parameter;
+        if (!params?.T2M) throw new Error("Unexpected POWER payload");
+        return params;
+      })
+      .catch((err) => {
+        locationPowerCache.delete(key);
+        throw err;
+      });
+    locationPowerCache.set(key, promise);
+    return promise;
+  }
 
   // Typical growing-calendar phase per month, and heat/drought sensitivity
   // (0-1), for each block's crop. A documented agronomic assumption - like
   // the vulnerability factors in the main AGROINTEL AI scoring model - not
   // a measurement. Determines when a field is realistically bare soil.
+  // "Cropland" is the generic stand-in used for a searched location, since
+  // we don't know what's actually planted there - see activeLocation.isHome.
+  // All calendars assume a Northern-Hemisphere season; genuinely wrong for
+  // Southern-Hemisphere/tropical searches - flagged honestly in the UI note.
   const CROP_CALENDAR = {
     Tomato: { bare: [11, 12, 1, 2, 3], establishing: [4], growing: [5, 6], peak: [7, 8], senescence: [9, 10] },
     Wheat: { bare: [7, 8], establishing: [9, 10], growing: [11, 12, 1, 2, 3], peak: [4, 5], senescence: [6] },
     Cotton: { bare: [11, 12, 1, 2, 3], establishing: [4], growing: [5, 6], peak: [7, 8], senescence: [9, 10] },
     Grapes: { bare: [12, 1, 2], establishing: [3], growing: [4, 5, 6], peak: [7, 8], senescence: [9, 10, 11] },
     Paddy: { bare: [11, 12, 1, 2, 3], establishing: [4, 5], growing: [6], peak: [7, 8], senescence: [9, 10] },
+    Cropland: { bare: [12, 1, 2], establishing: [3, 4], growing: [5, 6], peak: [7, 8], senescence: [9, 10, 11] },
   };
   const CROP_SENSITIVITY = {
     Tomato: { heat: 0.9, drought: 0.7 },
@@ -655,14 +716,16 @@ if (ctaForm) {
     Cotton: { heat: 0.4, drought: 0.3 },
     Grapes: { heat: 0.6, drought: 0.4 },
     Paddy: { heat: 0.5, drought: 1.0 }, // standing-water crop — very drought sensitive
+    Cropland: { heat: 0.6, drought: 0.6 },
   };
-  // Static physical terrain knowledge (not fabricated data): Block A sits
-  // on the steepest slope, A/E flank the real creek corridor.
+  // Static physical terrain knowledge (not fabricated data): on the home
+  // farm, Block A sits on the steepest slope, A/E flank the real creek
+  // corridor. Not meaningful for a searched location, so it's skipped there.
   const EROSION_TERRAIN_BIAS = { A: 15, B: 5, C: -5, D: -10, E: 0 };
   const FLOOD_TERRAIN_BIAS = { A: 15, B: -10, C: -10, D: -10, E: 20 };
 
   function cropPhase(crop, month) {
-    const cal = CROP_CALENDAR[crop];
+    const cal = CROP_CALENDAR[crop] || CROP_CALENDAR.Cropland;
     for (const [phase, months] of Object.entries(cal)) {
       if (months.includes(month)) return phase;
     }
@@ -680,10 +743,10 @@ if (ctaForm) {
   }
 
   // Real heavy-rain check: did any day within ~7 days of this calendar
-  // date, in the real fetched record, see >25mm rain (any year present)?
-  function recentHeavyRain(mm, dd) {
-    if (!powerDaily?.PRECTOTCORR) return false;
-    return Object.entries(powerDaily.PRECTOTCORR).some(([key, raw]) => {
+  // date, in the given real fetched record, see >25mm rain (any year present)?
+  function recentHeavyRain(mm, dd, dailySeries) {
+    if (!dailySeries?.PRECTOTCORR) return false;
+    return Object.entries(dailySeries.PRECTOTCORR).some(([key, raw]) => {
       const v = Number(raw);
       if (!Number.isFinite(v) || v <= -900 || v < 25) return false;
       return monthDayDistance(mm, dd, Number(key.slice(4, 6)), Number(key.slice(6, 8))) <= 7;
@@ -691,16 +754,16 @@ if (ctaForm) {
   }
 
   // Real POWER sample "typical for this time of year": averages whichever
-  // years are present in the fetched 2023-2024 record for the matching
-  // month/day. Returns null until the real data has loaded.
-  function powerSampleForDate(dateStr) {
-    if (!powerDaily) return null;
+  // years are present in the given fetched 2023-2024 record for the
+  // matching month/day. Returns null until that record has loaded.
+  function powerSampleForDate(dateStr, dailySeries) {
+    if (!dailySeries) return null;
     const d = new Date(`${dateStr}T00:00:00`);
     const mm = d.getMonth() + 1;
     const dd = d.getDate();
     const mmKey = String(mm).padStart(2, "0");
     const ddKey = String(dd).padStart(2, "0");
-    const keys = Object.keys(powerDaily.T2M || {}).filter((k) => k.slice(4, 6) === mmKey && k.slice(6, 8) === ddKey);
+    const keys = Object.keys(dailySeries.T2M || {}).filter((k) => k.slice(4, 6) === mmKey && k.slice(6, 8) === ddKey);
     if (!keys.length) return null;
     const avg = (series) => {
       const vals = keys.map((k) => Number(series?.[k])).filter((v) => Number.isFinite(v) && v > -900);
@@ -708,9 +771,9 @@ if (ctaForm) {
     };
     return {
       month: mm,
-      tMax: avg(powerDaily.T2M_MAX),
-      gwetroot: avg(powerDaily.GWETROOT),
-      recentHeavyRain: recentHeavyRain(mm, dd),
+      tMax: avg(dailySeries.T2M_MAX),
+      gwetroot: avg(dailySeries.GWETROOT),
+      recentHeavyRain: recentHeavyRain(mm, dd, dailySeries),
       matchedDays: keys.length,
     };
   }
@@ -743,21 +806,48 @@ if (ctaForm) {
     },
   };
 
-  // Each block's position as a fraction of the heatmap canvas, from its
-  // real lat/lon and the overlay's real geographic bounds — the gradient
-  // blobs sit over the actual field markers, not arbitrary fixed spots.
-  const BLOCK_FRAC = {};
-  (function computeBlockFractions() {
-    const [[south, west], [north, east]] = SUIT_BOUNDS;
-    BLOCK_MARKERS.forEach((b) => {
-      const [lat, lon] = b.pos;
-      BLOCK_FRAC[b.id] = { fx: (lon - west) / (east - west), fy: 1 - (lat - south) / (north - south) };
-    });
-  })();
+  // Position fraction of a lat/lon within a given bounds box — recomputed
+  // per render now (not once at load) since bounds/blocks change on search.
+  function fracFor(lat, lon, bounds) {
+    const [[south, west], [north, east]] = bounds;
+    return { fx: (lon - west) / (east - west), fy: 1 - (lat - south) / (north - south) };
+  }
+
+  // 5 generic, evenly-spread sample points across a bounds box, used for
+  // any searched (non-home) location — we don't have real per-field crop
+  // identities there, so these are explicitly generic "Cropland" points,
+  // not a claim about specific fields.
+  const GENERIC_POINT_FRACS = [[0.3, 0.3], [0.68, 0.28], [0.5, 0.5], [0.3, 0.7], [0.7, 0.72]];
+  function genericBlocksFor(bounds) {
+    const [[south, west], [north, east]] = bounds;
+    return GENERIC_POINT_FRACS.map(([fx, fy], i) => ({
+      id: String.fromCharCode(65 + i),
+      crop: "Cropland",
+      pos: [south + (1 - fy) * (north - south), west + fx * (east - west)],
+    }));
+  }
+
+  // Keeps the heatmap at a consistent, farm-scale size regardless of what
+  // was searched (a city, a whole country...) — this tool models a sample
+  // area around the searched point, not a country-wide survey (see the
+  // other AGROINTEL AI map for that). Falls back to a fixed box around the
+  // point when Nominatim gave no boundingbox, or gave an implausible one.
+  function suitBoundsFor(lat, lon, bbox) {
+    if (bbox) {
+      const latSpan = bbox.north - bbox.south;
+      const lonSpan = bbox.east - bbox.west;
+      if (latSpan > 0 && latSpan <= 1 && lonSpan > 0 && lonSpan <= 1) {
+        return [[bbox.south, bbox.west], [bbox.north, bbox.east]];
+      }
+    }
+    return [[lat - 0.07, lon - 0.115], [lat + 0.07, lon + 0.115]];
+  }
 
   // Computes one block's 0-100 score for the selected model, from the real
   // (optionally scenario-adjusted) POWER sample and the crop calendar.
-  function computeBlockScore(modelKey, block, sample) {
+  // Terrain biases only apply on the home farm, where they're real
+  // documented knowledge — meaningless for a generic searched point.
+  function computeBlockScore(modelKey, block, sample, isHome) {
     const crop = block.crop;
     const phase = sample ? cropPhase(crop, sample.month) : null;
     const sens = CROP_SENSITIVITY[crop] || { heat: 0.5, drought: 0.5 };
@@ -769,7 +859,7 @@ if (ctaForm) {
     let reason = "";
 
     if (modelKey === "erosion") {
-      score += EROSION_TERRAIN_BIAS[block.id] || 0;
+      if (isHome) score += EROSION_TERRAIN_BIAS[block.id] || 0;
       if (bare) { score += 35; reason = `${crop} is in its real bare-field window this month`; }
       if (sample.recentHeavyRain) { score += 25; reason += (reason ? "; " : "") + "a real >25mm rain event occurred around this date"; }
       if (!reason) reason = "live crop cover, no recent heavy rain";
@@ -788,11 +878,11 @@ if (ctaForm) {
         reason = "no real heavy-rain event around this date";
       }
     } else if (modelKey === "flood") {
-      score += FLOOD_TERRAIN_BIAS[block.id] || 0;
+      if (isHome) score += FLOOD_TERRAIN_BIAS[block.id] || 0;
       const wet = sample.gwetroot != null ? Math.min(1, sample.gwetroot / 0.5) : 0;
       score += wet * 35;
       if (sample.recentHeavyRain) { score += 20; reason = "real heavy rain + real root-zone wetness"; }
-      else reason = "based on terrain position + real root-zone wetness";
+      else reason = isHome ? "based on terrain position + real root-zone wetness" : "based on real root-zone wetness (terrain not modeled away from the home farm)";
     } else if (modelKey === "stress") {
       if (bare) {
         score = 10; reason = `${crop} field is bare/dormant — no live crop under heat or water stress`;
@@ -810,17 +900,17 @@ if (ctaForm) {
     return { score, phase, label, reason };
   }
 
-  function paintSuitability(modelKey, sample) {
+  function paintSuitability(modelKey, sample, blocks, bounds, isHome) {
     const meta = MODEL_META[modelKey];
     const canvas = document.createElement("canvas");
     canvas.width = 640;
     canvas.height = 420;
     const ctx = canvas.getContext("2d");
     const scores = {};
-    BLOCK_MARKERS.forEach((b) => {
-      const result = computeBlockScore(modelKey, b, sample);
+    blocks.forEach((b) => {
+      const result = computeBlockScore(modelKey, b, sample, isHome);
       scores[b.id] = result;
-      const { fx, fy } = BLOCK_FRAC[b.id];
+      const { fx, fy } = fracFor(b.pos[0], b.pos[1], bounds);
       const intensity = result.score / 100;
       const radius = (0.15 + intensity * 0.2) * 640;
       const [r, g, bch] = meta.color;
@@ -848,11 +938,13 @@ if (ctaForm) {
   const resetScenarioBtn = $("#resetScenario");
   let suitOverlay = null;
 
-  function renderFieldIntel(modelKey, scores, sample, dateStr) {
+  function renderFieldIntel(modelKey, scores, sample, dateStr, blocks, isHome) {
     const meta = MODEL_META[modelKey];
-    fieldIntel.innerHTML = BLOCK_MARKERS.map((b) => {
+    fieldIntel.innerHTML = blocks.map((b) => {
       const r = scores[b.id];
-      return `<li title="${r.reason.replace(/"/g, "&quot;")}"><span class="fi-block">${b.id}</span><span class="fi-crop">${b.crop} · ${r.phase}</span><span class="fi-risk ${r.label}">${r.label}</span></li>`;
+      const label = isHome ? b.id : `${b.id}`;
+      const cropLabel = isHome ? b.crop : "sample point";
+      return `<li title="${r.reason.replace(/"/g, "&quot;")}"><span class="fi-block">${label}</span><span class="fi-crop">${cropLabel} · ${r.phase}</span><span class="fi-risk ${r.label}">${r.label}</span></li>`;
     }).join("");
 
     const [r, g, bch] = meta.color;
@@ -864,15 +956,24 @@ if (ctaForm) {
     const scenarioNote = rainPct !== 0 || tempDelta !== 0
       ? ` What-if applied: ${rainPct >= 0 ? "+" : ""}${rainPct}% rainfall, ${tempDelta >= 0 ? "+" : ""}${tempDelta}°C over the real baseline.`
       : "";
+    const placeNote = isHome
+      ? ""
+      : " Using a generic cropland assumption (no specific crop identified here) and a Northern-Hemisphere growing calendar — treat with extra caution for Southern-Hemisphere or tropical locations.";
     modelNote.textContent = sample
-      ? `${meta.desc} Computed for ${dateLabel} from the real 2023–2024 NASA POWER record for this time of year.${scenarioNote}`
-      : `${meta.desc} Loading real NASA POWER data…`;
+      ? `${meta.desc} Computed for ${dateLabel} from the real 2023–2024 NASA POWER record for this time of year.${scenarioNote}${placeNote}`
+      : activeLocationPowerFailed
+        ? `${meta.desc} Couldn't reach NASA POWER for this location — showing a neutral placeholder.${placeNote}`
+        : `${meta.desc} Loading real NASA POWER data for this location…${placeNote}`;
   }
+
+  let activeLocationPower = null; // real daily series for a searched (non-home) location, once loaded
+  let activeLocationPowerFailed = false;
 
   function refreshSuitability() {
     const modelKey = modelSelect.value;
     const dateStr = dateInput.value || "2025-07-15";
-    const baseSample = powerSampleForDate(dateStr);
+    const dailySeries = activeLocation.isHome ? powerDaily : activeLocationPower;
+    const baseSample = powerSampleForDate(dateStr, dailySeries);
 
     // Apply the what-if scenario sliders over the real baseline sample —
     // kept separate from, and clearly labeled apart from, the real reading.
@@ -888,20 +989,45 @@ if (ctaForm) {
       };
     }
 
-    const { dataUrl, scores } = paintSuitability(modelKey, sample);
-    renderFieldIntel(modelKey, scores, sample, dateStr);
+    const { dataUrl, scores } = paintSuitability(modelKey, sample, activeBlocks, activeSuitBounds, activeLocation.isHome);
+    renderFieldIntel(modelKey, scores, sample, dateStr, activeBlocks, activeLocation.isHome);
 
     if (suitOverlay) {
       map.removeLayer(suitOverlay);
       suitOverlay = null;
     }
     if (suitabilityToggle.checked) {
-      suitOverlay = L.imageOverlay(dataUrl, SUIT_BOUNDS, { opacity: 0.8 });
+      suitOverlay = L.imageOverlay(dataUrl, activeSuitBounds, { opacity: 0.8 });
       suitOverlay.addTo(map);
     }
   }
   suitabilityToggle.addEventListener("change", refreshSuitability);
   modelSelect.addEventListener("change", refreshSuitability);
+
+  // Moves the suitability heatmap + sample-point markers to a newly
+  // searched place — this is the fix for the reported bug (they used to
+  // stay fixed over the home farm no matter what was searched).
+  async function focusSuitabilityOn(lat, lon, label, bbox) {
+    const bounds = suitBoundsFor(lat, lon, bbox);
+    activeLocation = { lat, lon, name: label, isHome: false };
+    activeSuitBounds = bounds;
+    activeBlocks = genericBlocksFor(bounds);
+    activeLocationPower = null;
+    activeLocationPowerFailed = false;
+    renderBlockMarkers(activeBlocks, false);
+    refreshSuitability(); // shows a "loading" state immediately
+
+    try {
+      const series = await fetchPowerDailyFor(lat, lon);
+      if (activeLocation.lat !== lat || activeLocation.lon !== lon) return; // superseded by a newer search
+      activeLocationPower = series;
+    } catch (err) {
+      console.error("POWER fetch failed for searched location", lat, lon, err);
+      if (activeLocation.lat !== lat || activeLocation.lon !== lon) return;
+      activeLocationPowerFailed = true;
+    }
+    refreshSuitability();
+  }
 
   /* Season-scrub slider: moves the real date input across a full year
      (day fixed at the 15th) so the heatmap's seasonal change is easy to see. */
