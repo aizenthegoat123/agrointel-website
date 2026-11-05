@@ -1401,108 +1401,6 @@ body {
 .quote-card figcaption strong { display: block; font-size: 0.88rem; color: var(--green-950); }
 .quote-card figcaption small { font-size: 0.74rem; color: var(--muted); }
 
-/* ============ Pricing ============ */
-.billing-toggle {
-  display: inline-flex; align-items: center; gap: 0.7rem;
-  margin-top: 1.4rem;
-}
-.bt-label { font-size: 0.9rem; font-weight: 600; color: var(--ink); }
-.bt-label.muted { color: var(--muted); }
-.save-pill {
-  font-style: normal; font-size: 0.68rem;
-  background: var(--lime-soft); color: #3f6212;
-  border-radius: 999px; padding: 0.15rem 0.5rem;
-  margin-left: 0.3rem; font-weight: 700;
-}
-.switch {
-  width: 46px; height: 26px;
-  border-radius: 999px;
-  border: 0;
-  background: #cfd8cc;
-  cursor: pointer;
-  position: relative;
-  transition: background 0.25s;
-}
-.switch .knob {
-  position: absolute; top: 3px; left: 3px;
-  width: 20px; height: 20px; border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-  transition: transform 0.25s;
-}
-.switch[aria-checked="true"] { background: var(--green-700); }
-.switch[aria-checked="true"] .knob { transform: translateX(20px); }
-
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.25rem;
-  align-items: stretch;
-}
-.plan-card {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 1.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  box-shadow: var(--shadow-sm);
-}
-.plan-popular {
-  border: 2px solid var(--green-700);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-6px);
-}
-.popular-badge {
-  position: absolute;
-  top: -14px; left: 50%;
-  transform: translateX(-50%);
-  background: linear-gradient(150deg, var(--green-800), var(--green-700));
-  color: #fff;
-  font-size: 0.7rem; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 0.35rem 1rem;
-  border-radius: 999px;
-  white-space: nowrap;
-}
-.plan-card h3 {
-  font-family: var(--font-display);
-  font-size: 1.25rem; color: var(--green-950); font-weight: 600;
-}
-.plan-for { font-size: 0.84rem; color: var(--muted); min-height: 2.4em; }
-.plan-price {
-  display: flex; align-items: baseline; gap: 0.45rem;
-  padding: 0.85rem 0;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 0.85rem;
-}
-.amount {
-  font-family: var(--font-display);
-  font-size: 2.4rem; font-weight: 600;
-  letter-spacing: -0.02em; color: var(--green-950);
-}
-.per { font-size: 0.78rem; color: var(--muted); }
-.plan-list {
-  list-style: none;
-  display: flex; flex-direction: column; gap: 0.55rem;
-  margin-bottom: 1.2rem;
-}
-.plan-list li {
-  position: relative;
-  padding-left: 1.5rem;
-  font-size: 0.88rem;
-  color: var(--ink-soft);
-}
-.plan-list li::before {
-  content: "";
-  position: absolute; left: 0; top: 1px;
-  width: 16px; height: 16px; border-radius: 50%;
-  background: #dcfce7 url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Cpath fill="%23166534" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/%3E%3C/svg%3E') center / 10px no-repeat;
-}
-.plan-card .btn { margin-top: auto; }
-
 /* ============ FAQ ============ */
 .faq-wrap {
   display: grid;
@@ -2069,7 +1967,6 @@ body {
 /* Inset top-highlight on white cards — machined, tactile feel */
 .feature-card,
 .quote-card,
-.plan-card,
 .crop-tile,
 .step,
 .chart-card,
@@ -2082,8 +1979,7 @@ body {
 }
 .feature-card:hover,
 .quote-card:hover,
-.crop-tile:hover,
-.plan-card:hover {
+.crop-tile:hover {
   box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 .context-card { box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.12); }
@@ -2116,9 +2012,6 @@ body {
 
 @media (max-width: 1060px) {
   .feature-grid, .steps, .quote-grid { grid-template-columns: repeat(2, 1fr); }
-  .pricing-grid { gap: 0.9rem; }
-  .pricing-grid .plan-card { padding: 1.25rem; }
-  .amount { font-size: 2rem; }
   .crop-grid { grid-template-columns: repeat(4, 1fr); }
   .analysis-grid { grid-template-columns: 1fr; }
   #nasaMap { height: 430px; }
@@ -2135,8 +2028,6 @@ body {
   .stat { border-left: 0; }
   .faq-wrap { grid-template-columns: 1fr; gap: 1.5rem; }
   .cta-panel { grid-template-columns: 1fr; gap: 1.75rem; }
-  .pricing-grid { grid-template-columns: 1fr; max-width: 30rem; margin-inline: auto; }
-  .plan-popular { transform: none; }
   .ask-grid { grid-template-columns: 1fr; }
   .crop-grid { grid-template-columns: repeat(3, 1fr); }
   .ask-messages { min-height: 320px; max-height: 420px; }
@@ -2164,7 +2055,7 @@ body {
   .nav-links a { width: 100%; padding: 0.75rem 0.25rem; border-bottom: 1px solid var(--line); font-size: 1rem; }
   .nav-links a:last-child { border-bottom: 0; }
   .hamburger { display: flex; }
-  .feature-grid, .steps, .quote-grid, .pricing-grid { grid-template-columns: 1fr; }
+  .feature-grid, .steps, .quote-grid { grid-template-columns: 1fr; }
   .crop-grid { grid-template-columns: repeat(2, 1fr); }
   #nasaMap { height: 340px; }
   .map-toolbar { flex-direction: column; align-items: stretch; }

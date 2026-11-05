@@ -102,29 +102,6 @@ $$(".faq-item").forEach((item) => {
 });
 
 /* ==========================================================
-   Pricing billing toggle
-   ========================================================== */
-const billingSwitch = $("#billingSwitch");
-const btMonthly = $("#btMonthly");
-const btYearly = $("#btYearly");
-
-function setBilling(yearly) {
-  billingSwitch.setAttribute("aria-checked", String(yearly));
-  btMonthly.classList.toggle("muted", yearly);
-  btYearly.classList.toggle("muted", !yearly);
-  $$(".amount[data-monthly]").forEach((el) => {
-    el.textContent = yearly ? el.dataset.yearly : el.dataset.monthly;
-  });
-  $$(".per[data-monthly]").forEach((el) => {
-    el.textContent = yearly ? el.dataset.yearly : el.dataset.monthly;
-  });
-}
-billingSwitch.addEventListener("click", () => {
-  setBilling(billingSwitch.getAttribute("aria-checked") !== "true");
-});
-setBilling(false);
-
-/* ==========================================================
    Ask Agro — real Gemini AI, grounded in NASA farm data
    ========================================================== */
 const agronomyContext = {
@@ -1325,7 +1302,7 @@ if (ctaForm) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const candidates = $$(
-    ".section-head, .tip-bar, .stat, .feature-card, .quote-card, .plan-card, .step, .faq-item, .crop-tile, .chart-card, .takeaway-card, .an-card, .map-toolbar, .analysis-grid > *, .ask-grid > *, .gs-steps-preview > li, .gs-quote"
+    ".section-head, .tip-bar, .stat, .feature-card, .quote-card, .step, .faq-item, .crop-tile, .chart-card, .takeaway-card, .an-card, .map-toolbar, .analysis-grid > *, .ask-grid > *, .gs-steps-preview > li, .gs-quote"
   );
   candidates.forEach((el) => el.classList.add("reveal"));
 
