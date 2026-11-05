@@ -19,7 +19,7 @@
     <div class="container announce-inner">
       <span class="announce-dot" aria-hidden="true"></span>
       <p><strong>FieldVision&trade; 2.0 is live</strong> — early-blight detection at 94% precision across 40 crops.</p>
-      <a href="#ask" class="announce-link">Ask Agro now
+      <a href="#analysis" class="announce-link">Ask Agro now
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.2 5.2 19 11h-6.6v2H19l-5.8 5.8-1.4-1.4 4-4H4.6v-2h11.2l-4-4z"/></svg>
       </a>
       <button class="announce-close" id="announceClose" aria-label="Dismiss announcement">
@@ -44,7 +44,6 @@
         <a href="#features">Features</a>
         <a href="#how">How it works</a>
         <a href="#analysis">NASA Live</a>
-        <a href="#ask">Ask Agro</a>
         <a href="#crops">Crops</a>
       </nav>
 
@@ -72,7 +71,7 @@
             <a href="get-started.html" class="btn btn-primary btn-lg">Start free trial
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
             </a>
-            <a href="#ask" class="btn btn-outline btn-lg">
+            <a href="#analysis" class="btn btn-outline btn-lg">
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-2zm4 6h8v2H8zm0-3.5h8v2H8z"/></svg>
               Ask Agro — live AI
             </a>
@@ -379,6 +378,44 @@
             <div class="map-attrib">Imagery © Esri, Maxar, Earthstar Geographics · Place labels © Esri · NASA GIBS (MODIS Terra / Aqua) · NASA POWER · <a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA Worldview</a></div>
           </div>
 
+          <aside class="ask-chat" aria-label="Ask Agro AI chat">
+            <div class="chat-header ask-chat-header">
+              <div class="chat-id">
+                <span class="chat-avatar">
+                  <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><defs><linearGradient id="gem2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4285f4"/><stop offset="0.5" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#gem2)"/><path d="M23 9 12.5 20.5M23 9l-4.5 14L12.5 20.5z" fill="#fff" fill-opacity="0.92"/></svg>
+                </span>
+                <div>
+                  <div class="chat-name">Ask Agro</div>
+                  <div class="chat-status"><span class="status-dot" id="askStatusDot"></span> <span id="askStatusText">Connecting…</span></div>
+                </div>
+              </div>
+              <button class="clear-chat" id="askClearBtn" type="button" aria-label="Clear conversation">
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2h-1.1l-1.2 14a2 2 0 0 1-2 1.9H8.3a2 2 0 0 1-2-1.9L5.1 7H4V5h4zm-1.2 4 1.1 13h6.2l1.1-13z"/></svg>
+              </button>
+            </div>
+
+            <div class="chat-messages ask-messages" id="askMessages" aria-live="polite"></div>
+
+            <div class="chat-suggestions" id="askSuggestions" aria-label="Suggested questions">
+              <button class="chip" data-question="What's the erosion risk here right now?">Erosion risk here?</button>
+              <button class="chip" data-question="go to Kenya">Go to Kenya</button>
+              <button class="chip" data-question="show NDVI">Show NDVI</button>
+              <button class="chip" data-question="Is this score trustworthy?">Is this trustworthy?</button>
+            </div>
+
+            <form class="chat-input-area" id="askForm" autocomplete="off">
+              <label class="sr-only" for="askInput">Ask Agro a question</label>
+              <input type="text" id="askInput" placeholder="Ask about this place, or say “go to Kenya”…" maxlength="500" />
+              <button type="submit" id="askSendBtn" class="send-btn" aria-label="Send message">
+                <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M3 20.5 22 12 3 3.5v6.6L15 12 3 13.9z"/></svg>
+              </button>
+            </form>
+            <p class="ask-disclaimer">Grounded in real NASA data for wherever's shown on the map · Not a substitute for professional agronomy advice.</p>
+          </aside>
+        </div>
+
+        <!-- Suitability Model — moved here, full width, below the map+chat -->
+        <div class="suitability-block">
           <aside class="suitability-panel" aria-label="Suitability model">
             <h3><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2 2 8l10 6 10-6zm-8.5 8.3L2 11.5l10 6 10-6-1.5-1.2L12 14.7zM2 15l1.5-1L12 20l8.5-6 1.5 1-10 6z"/></svg> Suitability Model</h3>
             <p>Risk zones positioned at each block's real location, computed from the real NASA POWER heat &amp; root-zone-wetness record for this time of year, combined with each crop's documented growth-calendar and sensitivity (bare-field / establishing / growing / peak / senescence) — not a per-pixel satellite measurement.</p>
@@ -468,100 +505,6 @@
             </div>
           </div>
           <p class="data-credit">Data: <a href="https://power.larc.nasa.gov/" target="_blank" rel="noopener">NASA POWER</a> (Agroclimatology, daily) · <a href="https://gibs.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA GIBS</a> (MODIS) · <a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA Worldview</a> · Esri World Imagery. Open NASA datasets — no API keys required.</p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ ASK AGRO — GEMINI, GROUNDED IN NASA DATA ============ -->
-    <section class="section" id="ask">
-      <div class="container">
-        <div class="section-head">
-          <span class="eyebrow">Ask Agro · Gemini AI</span>
-          <h2 class="section-title">Not a scripted bot. <em>Your</em> agronomist<br class="br-lg" />on the other end.</h2>
-          <p class="section-sub">Ask Agro is a real large-language-model agronomist — Google’s Gemini, grounded in <strong>your farm’s live NASA POWER climate data and MODIS NDVI passes</strong> from the map above. It answers with your numbers, not canned replies.</p>
-        </div>
-
-        <div class="ask-grid">
-          <!-- LEFT: what Agro knows — live context readout -->
-          <aside class="context-card" aria-label="What Ask Agro knows">
-            <div class="context-head">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8zm1 5h-2v6h6v-2h-4z"/></svg>
-              <h3>What Agro knows, <em>right now</em></h3>
-            </div>
-            <ul class="context-list">
-              <li><span class="ctx-label">Farm</span><span class="ctx-value">GreenHarvest North · 214 ha · 5 blocks<br /><small>Central Iowa — 42.02°N, 93.55°W</small></span></li>
-              <li><span class="ctx-label">Blocks</span><span class="ctx-value"><small>A Tomato 0.62 (blight alert) · B Wheat 0.78 · C Cotton 0.66 · D Grapes 0.83 · E Paddy 0.81</small></span></li>
-              <li><span class="ctx-label">NASA POWER</span><span class="ctx-value"><span class="ctx-live" id="ctxPowerStatus"><span class="ctx-dot wait"></span>loading…</span><br /><small id="ctxPowerDetail">731 daily records · 2023–2024 · Agroclimatology (AG)</small></span></li>
-              <li><span class="ctx-label">MODIS layer</span><span class="ctx-value" id="ctxLayer">MODIS Terra True Color · 2025-07-15</span></li>
-              <li><span class="ctx-label">Spray window</span><span class="ctx-value">Thu 6–9 AM · wind &lt; 8 km/h · 6 h rain-free</span></li>
-            </ul>
-
-            <div class="connect-box" id="connectBox">
-              <div class="connect-title-row">
-                <span class="ctx-dot" id="geminiDot"></span>
-                <h4 id="connectTitle">Connect Gemini to go live</h4>
-              </div>
-              <p id="connectHint">Paste your Google AI Studio API key — it stays in this browser and is sent only to Google’s API. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="inline-link">Get a free key →</a></p>
-              <form class="connect-form" id="connectForm" autocomplete="off">
-                <label class="sr-only" for="geminiKey">Gemini API key</label>
-                <input type="password" id="geminiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" />
-                <button type="button" class="key-toggle" id="keyToggle" aria-label="Show or hide key" aria-pressed="false">
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 5c5.3 0 9.6 4.6 11 7-1.4 2.4-5.7 7-11 7S2.4 14.4 1 12c1.4-2.4 5.7-7 11-7zm0 2c-4 0-7.7 3.6-8.9 5 1.2 1.4 4.9 5 8.9 5s7.7-3.6 8.9-5c-1.2-1.4-4.9-5-8.9-5zm0 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg>
-                </button>
-                <button type="submit" class="btn btn-primary" id="connectBtn">Connect</button>
-              </form>
-              <label class="model-pick" for="geminiModel">Model
-                <select id="geminiModel">
-                  <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash — fast</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro — deepest reasoning</option>
-                </select>
-              </label>
-              <button type="button" class="disconnect" id="disconnectBtn" hidden>Disconnect this browser</button>
-              <p class="connect-note">Key is stored in <code>localStorage</code> only. Static sites can’t hide keys — for production, proxy through your backend.</p>
-            </div>
-          </aside>
-
-          <!-- RIGHT: the chat -->
-          <div class="ask-chat" aria-label="Ask Agro chat">
-            <div class="chat-header ask-chat-header">
-              <div class="chat-id">
-                <span class="chat-avatar">
-                  <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><defs><linearGradient id="gem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4285f4"/><stop offset="0.5" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#gem)"/><path d="M23 9 12.5 20.5M23 9l-4.5 14L12.5 20.5z" fill="#fff" fill-opacity="0.92"/></svg>
-                </span>
-                <div>
-                  <div class="chat-name">Ask Agro <span class="model-badge" id="modelBadge">Gemini 2.5 Flash</span></div>
-                  <div class="chat-status"><span class="status-dot" id="geminiStatusDot"></span> <span id="geminiStatusText">Offline — connect your key</span></div>
-                </div>
-              </div>
-              <button class="clear-chat" id="askClearBtn" type="button" aria-label="Clear conversation">
-                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2h-1.1l-1.2 14a2 2 0 0 1-2 1.9H8.3a2 2 0 0 1-2-1.9L5.1 7H4V5h4zm-1.2 4 1.1 13h6.2l1.1-13z"/></svg>
-              </button>
-            </div>
-
-            <div class="chat-messages ask-messages" id="askMessages" aria-live="polite"></div>
-
-            <div class="chat-locked" id="chatLocked">
-              <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zm-6-2a2 2 0 0 1 4 0v2h-4zm.9 11.5v1a1.1 1.1 0 0 1-2.2 0v-1a2.4 2.4 0 1 1 2.2 0z"/></svg>
-              <h4>Connect Gemini to unlock</h4>
-              <p>Paste your Google AI Studio key on the left — Ask Agro then answers with your NASA POWER + MODIS data woven in.</p>
-            </div>
-
-            <div class="chat-suggestions" id="askSuggestions" aria-label="Suggested questions">
-              <button class="chip" data-question="Should I irrigate Block C this week? Use our NASA POWER data.">Irrigate Block C?</button>
-              <button class="chip" data-question="Why did soil moisture dip in September, and what should I change for next season?">Sep moisture dip</button>
-              <button class="chip" data-question="Build me a nitrogen split plan for Block B wheat, based on current conditions.">N plan for wheat</button>
-              <button class="chip" data-question="Draft a Thursday spray window for early blight on Block A tomato — include rates and PPE.">Spray plan, Block A</button>
-            </div>
-
-            <form class="chat-input-area" id="askForm" autocomplete="off">
-              <label class="sr-only" for="askInput">Ask Agro a question</label>
-              <input type="text" id="askInput" placeholder="Ask about your farm — moisture, sprays, N, disease…" maxlength="500" disabled />
-              <button type="submit" id="askSendBtn" class="send-btn" aria-label="Send message" disabled>
-                <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M3 20.5 22 12 3 3.5v6.6L15 12 3 13.9z"/></svg>
-              </button>
-            </form>
-            <p class="ask-disclaimer">Answers use NASA POWER (42.02°N, 93.55°W · 2023–2024) + MODIS NDVI via GIBS · Not a substitute for professional agronomy advice.</p>
-          </div>
         </div>
       </div>
     </section>
@@ -754,7 +697,7 @@
           <h4>Product</h4>
           <a href="#features">Photo diagnosis</a>
           <a href="analyse.html">Crop Analyse report</a>
-          <a href="#ask">Ask Agro (Gemini AI)</a>
+          <a href="#analysis">Ask Agro (Gemini AI)</a>
           <a href="#analysis">NASA live map</a>
           <a href="#crops">Crop library</a>
           <a href="#features">NDVI monitoring</a>

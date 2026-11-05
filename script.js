@@ -102,277 +102,6 @@ $$(".faq-item").forEach((item) => {
 });
 
 /* ==========================================================
-   Ask Agro — real Gemini AI, grounded in NASA farm data
-   ========================================================== */
-const agronomyContext = {
-  farmSummary: "GreenHarvest North, Central Iowa, USA — 42.02°N, 93.55°W — 214 ha, 5 blocks.",
-  blockSummary:
-    "Block A Tomato 38.1 ha NDVI 0.62 (early blight alert, flowering); Block B Wheat 42.6 ha NDVI 0.78 (tillering); Block C Cotton 61.4 ha NDVI 0.66 (aphid risk, boll formation); Block D Grapes 29.8 ha NDVI 0.83 (veraison); Block E Paddy 42.1 ha NDVI 0.81 (panicle initiation, 4 cm standing water).",
-  powerSummary:
-    "NASA POWER data not loaded yet — answer from general agronomy and say when local data would sharpen the advice.",
-};
-
-const askMessages = $("#askMessages");
-const askForm = $("#askForm");
-const askInput = $("#askInput");
-const askSendBtn = $("#askSendBtn");
-const askSuggestions = $("#askSuggestions");
-const askClearBtn = $("#askClearBtn");
-const chatLocked = $("#chatLocked");
-const connectForm = $("#connectForm");
-const connectTitle = $("#connectTitle");
-const connectHint = $("#connectHint");
-const geminiKeyInput = $("#geminiKey");
-const geminiModelSelect = $("#geminiModel");
-const keyToggle = $("#keyToggle");
-const disconnectBtn = $("#disconnectBtn");
-const geminiDot = $("#geminiDot");
-const geminiStatusDot = $("#geminiStatusDot");
-const geminiStatusText = $("#geminiStatusText");
-const modelBadge = $("#modelBadge");
-const ctxPowerStatus = $("#ctxPowerStatus");
-const ctxPowerDetail = $("#ctxPowerDetail");
-const ctxLayer = $("#ctxLayer");
-
-const GEMINI_KEY_STORE = "agro_gemini_key";
-const GEMINI_MODEL_STORE = "agro_gemini_model";
-const WELCOME_MSG =
-  "Connected to Gemini and grounded on this farm's 731-day NASA POWER record. Ask me about irrigation, sprays, nitrogen, disease or weather — for example, “Should I irrigate Block C this week?”";
-
-let geminiKey = localStorage.getItem(GEMINI_KEY_STORE) || "";
-if (localStorage.getItem(GEMINI_MODEL_STORE)) {
-  geminiModelSelect.value = localStorage.getItem(GEMINI_MODEL_STORE);
-}
-const chatHistory = []; // [{ role: "user" | "model", text }]
-
-const escapeHtml = (s) =>
-  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-/** Minimal, safe markdown: bold, italic, code, dash bullets. */
-function formatBot(md) {
-  let s = escapeHtml(md);
-  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
-  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
-  s = s
-    .split("\n")
-    .map((l) => (/^\s*[-*]\s+/.test(l) ? "• " + l.replace(/^\s*[-*]\s+/, "") : l))
-    .join("\n");
-  return s;
-}
-
-function appendMsg(text, sender) {
-  const bubble = document.createElement("div");
-  bubble.className = `message ${sender}`;
-  if (sender === "user") bubble.textContent = text;
-  else bubble.innerHTML = text; // bot HTML is produced by formatBot (escaped)
-  askMessages.appendChild(bubble);
-  askMessages.scrollTop = askMessages.scrollHeight;
-  return bubble;
-}
-
-function showAskTyping() {
-  const typing = document.createElement("div");
-  typing.className = "typing";
-  typing.setAttribute("aria-label", "Ask Agro is thinking");
-  typing.innerHTML = "<i></i><i></i><i></i>";
-  askMessages.appendChild(typing);
-  askMessages.scrollTop = askMessages.scrollHeight;
-  return typing;
-}
-
-const setDot = (el, state) => {
-  el.classList.remove("ok", "wait", "error");
-  if (state) el.classList.add(state);
-};
-
-const modelLabel = () => geminiModelSelect.selectedOptions[0].textContent.split("—")[0].trim();
-
-function applyConnectionUI(online) {
-  modelBadge.textContent = modelLabel();
-  chatLocked.classList.toggle("hidden", online);
-  askInput.disabled = !online;
-  askSendBtn.disabled = !online;
-  disconnectBtn.hidden = !online;
-  connectForm.hidden = online;
-  if (online) {
-    setDot(geminiDot, "ok");
-    setDot(geminiStatusDot, "ok");
-    geminiStatusText.textContent = `Online — ${modelLabel()} · grounded in NASA POWER + MODIS`;
-    connectTitle.textContent = "Gemini connected";
-    connectHint.innerHTML =
-      "Every reply now weaves in your farm's live NASA POWER record and MODIS layers. Ask away.";
-  } else {
-    setDot(geminiDot, null);
-    setDot(geminiStatusDot, null);
-    geminiStatusText.textContent = "Offline — connect your key";
-    connectTitle.textContent = "Connect Gemini to go live";
-    connectHint.innerHTML =
-      'Paste your Google AI Studio API key — it stays in this browser and is sent only to Google’s API. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="inline-link">Get a free key →</a>';
-  }
-}
-
-function buildSystemInstruction() {
-  const layerSelect = $("#nasaLayerSelect");
-  const dateInput = $("#nasaDate");
-  const layerName = layerSelect?.selectedOptions?.[0]?.textContent?.trim() || "MODIS Terra True Color";
-  const layerDate = dateInput?.value || "2025-07-15";
-
-  return [
-    "You are Ask Agro, an expert agronomist embedded inside AgroIntel for GreenHarvest North, a 214 ha farm in Central Iowa (42.02°N, 93.55°W).",
-    `Farm: ${agronomyContext.farmSummary}`,
-    `Blocks: ${agronomyContext.blockSummary}`,
-    `NASA POWER (this exact location, 2023–2024, Agroclimatology community): ${agronomyContext.powerSummary}`,
-    `Satellite layer available to the grower right now: ${layerName} (${layerDate}), served by NASA GIBS/Worldview.`,
-    "Rules:",
-    "- Answer in under 200 words, concrete and practical: dosages with units, timing windows, block IDs.",
-    "- Use the data above; if it cannot inform the answer, say so briefly and answer from general agronomy.",
-    "- Never invent sensor readings, weather for other places/dates, or prices.",
-    "- For pesticide handling, food-safety or other safety-relevant advice, include the key safety instruction.",
-    "- Prefer short bullet lists. No emojis.",
-  ].join("\n");
-}
-
-async function askGemini(userText) {
-  const model = geminiModelSelect.value;
-  const contents = chatHistory.map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
-  contents.push({ role: "user", parts: [{ text: userText }] });
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: buildSystemInstruction() }] },
-        contents,
-        generationConfig: { temperature: 0.35, maxOutputTokens: 900 },
-      }),
-    }
-  );
-
-  if (!res.ok) {
-    const err = new Error(`Gemini HTTP ${res.status}`);
-    err.status = res.status;
-    throw err;
-  }
-  const data = await res.json();
-  const text = (data?.candidates?.[0]?.content?.parts || [])
-    .map((p) => p.text || "")
-    .join("")
-    .trim();
-  if (!text) throw new Error("Gemini returned an empty response");
-  return text;
-}
-
-async function handleAsk(text) {
-  appendMsg(text, "user");
-  chatHistory.push({ role: "user", text });
-  askInput.value = "";
-  const typing = showAskTyping();
-  askInput.disabled = true;
-  askSendBtn.disabled = true;
-
-  try {
-    const reply = await askGemini(text);
-    typing.remove();
-    chatHistory.push({ role: "model", text: reply });
-    if (chatHistory.length > 24) chatHistory.splice(0, chatHistory.length - 24);
-    appendMsg(formatBot(reply), "bot");
-  } catch (err) {
-    typing.remove();
-    console.error("Gemini error:", err);
-    let msg = "Something went wrong reaching Gemini — please try again.";
-    if (err.status === 400 || err.status === 403)
-      msg = "Gemini rejected the key. Check it, and make sure the Gemini API is enabled in your Google AI Studio project.";
-    else if (err.status === 404)
-      msg = "That model isn’t available for this key — switch the model dropdown (Flash ↔ Pro) and retry.";
-    else if (err.status === 429)
-      msg = "Rate limited (429) — wait a moment, then retry.";
-    else if (err.name === "TypeError")
-      msg = "Network error — are you online?";
-    appendMsg(`<strong>Connection hiccup.</strong> ${escapeHtml(msg)}`, "bot");
-    showToast(msg);
-  } finally {
-    askInput.disabled = false;
-    askSendBtn.disabled = false;
-    askInput.focus();
-  }
-}
-
-/* Connect / disconnect */
-connectForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const key = geminiKeyInput.value.trim();
-  if (key.length < 30) {
-    showToast("That doesn’t look like a Google AI key (usually starts with “AIza…”).");
-    geminiKeyInput.focus();
-    return;
-  }
-  geminiKey = key;
-  localStorage.setItem(GEMINI_KEY_STORE, geminiKey);
-  localStorage.setItem(GEMINI_MODEL_STORE, geminiModelSelect.value);
-  geminiKeyInput.value = "";
-  applyConnectionUI(true);
-  if (!askMessages.children.length) appendMsg(WELCOME_MSG, "bot");
-  showToast("Gemini connected — Ask Agro is live.");
-});
-
-disconnectBtn.addEventListener("click", () => {
-  localStorage.removeItem(GEMINI_KEY_STORE);
-  geminiKey = "";
-  applyConnectionUI(false);
-  showToast("Gemini disconnected — key removed from this browser.");
-});
-
-keyToggle.addEventListener("click", () => {
-  const reveal = geminiKeyInput.type === "password";
-  geminiKeyInput.type = reveal ? "text" : "password";
-  keyToggle.setAttribute("aria-pressed", String(reveal));
-});
-
-geminiModelSelect.addEventListener("change", () => {
-  localStorage.setItem(GEMINI_MODEL_STORE, geminiModelSelect.value);
-  if (geminiKey) {
-    modelBadge.textContent = modelLabel();
-    geminiStatusText.textContent = `Online — ${modelLabel()} · grounded in NASA POWER + MODIS`;
-  }
-});
-
-/* Conversation */
-askForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const text = askInput.value.trim();
-  if (!text || !geminiKey) return;
-  handleAsk(text);
-});
-
-askSuggestions.addEventListener("click", (e) => {
-  const chip = e.target.closest(".chip");
-  if (!chip) return;
-  if (!geminiKey) {
-    showToast("Connect your Gemini key first — it’s free at aistudio.google.com/apikey.");
-    geminiKeyInput.focus();
-    return;
-  }
-  handleAsk(chip.dataset.question);
-});
-
-askClearBtn.addEventListener("click", () => {
-  chatHistory.length = 0;
-  askMessages.innerHTML = "";
-  if (geminiKey) appendMsg(WELCOME_MSG, "bot");
-  showToast("Conversation cleared.");
-});
-
-/* Init */
-applyConnectionUI(Boolean(geminiKey));
-if (geminiKey) appendMsg(WELCOME_MSG, "bot");
-
-/* ==========================================================
    Crop library filters
    ========================================================== */
 const cropFilters = $$(".crop-filter");
@@ -1240,12 +969,6 @@ if (ctaForm) {
     $("#takeawayWater").innerHTML =
       `2023 delivered <strong>${p2023.toFixed(0)} mm</strong> vs <strong>${p2024.toFixed(0)} mm</strong> in 2024 — <strong>${Math.abs(delta).toFixed(0)} mm ${wetter} (${pct}%)</strong>. ${delta >= 0 ? "Plan drainage and fungicide timing first." : "Plan irrigation capacity and drought-tolerant hybrids first."}`;
 
-    // Publish to the shared agronomy context (chatbot reads this)
-    agronomyContext.powerSummary =
-      `Rain 2023 ${p2023.toFixed(0)} mm vs 2024 ${p2024.toFixed(0)} mm (${Math.abs(delta).toFixed(0)} mm ${wetter}, ${pct}%). ` +
-      `${hotDays} days > 32 °C across the two seasons (peak ${peak.toFixed(1)} °C on ${peakDate}). ` +
-      `Root-zone wetness (GWETROOT) mean ${gMean.toFixed(2)}; ${comfortDays}/${counted} comfort days (≥ 0.40); ${dipDays} dips, most in ${topDipMonth}; season low ${minV.toFixed(2)} on ${lowDate}.`;
-    agronomyContext.powerLoaded = true;
     const ctxS = $("#ctxPowerStatus"), ctxD = $("#ctxPowerDetail");
     if (ctxS) ctxS.innerHTML = '<span class="ctx-dot ok"></span>live — 731 days loaded';
     if (ctxD) ctxD.textContent =
@@ -1293,6 +1016,282 @@ if (ctaForm) {
   }
   loadBtn.addEventListener("click", () => loadPowerData(false));
   loadPowerData(true); // silent warm-up — Ask Agro chats with fresh data
+
+  /* ==========================================================
+     Ask Agro — powered by AGROINTEL AI's own backend, not a
+     visitor-supplied key. Lives inside this same IIFE so it can read
+     the map's real state (activeLocation, activeBlocks) and control it.
+     ========================================================== */
+  const AGROINTEL_API_BASE = "https://agrointel-ai-api.vercel.app";
+
+  const askMessages = $("#askMessages");
+  const askForm = $("#askForm");
+  const askInput = $("#askInput");
+  const askSendBtn = $("#askSendBtn");
+  const askSuggestions = $("#askSuggestions");
+  const askClearBtn = $("#askClearBtn");
+  const askStatusDot = $("#askStatusDot");
+  const askStatusText = $("#askStatusText");
+
+  const WELCOME_MSG =
+    "Hi! I'm Ask Agro, grounded in real NASA data for whatever place is on the map. Ask about irrigation, risk, or soil - or just say hi. I can move the map too: try “go to Kenya” or “show NDVI”.";
+
+  const escapeHtml = (s) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  function formatBot(md) {
+    let s = escapeHtml(md);
+    s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+    s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+    s = s
+      .split("\n")
+      .map((l) => (/^\s*[-*]\s+/.test(l) ? "• " + l.replace(/^\s*[-*]\s+/, "") : l))
+      .join("\n");
+    return s;
+  }
+
+  function appendAskMsg(text, sender) {
+    const bubble = document.createElement("div");
+    bubble.className = `message ${sender}`;
+    if (sender === "user") bubble.textContent = text;
+    else bubble.innerHTML = text;
+    askMessages.appendChild(bubble);
+    askMessages.scrollTop = askMessages.scrollHeight;
+    return bubble;
+  }
+
+  function showAskTyping() {
+    const typing = document.createElement("div");
+    typing.className = "typing";
+    typing.setAttribute("aria-label", "Ask Agro is thinking");
+    typing.innerHTML = "<i></i><i></i><i></i>";
+    askMessages.appendChild(typing);
+    askMessages.scrollTop = askMessages.scrollHeight;
+    return typing;
+  }
+
+  // Real indicators for any lat/lon, cached per rounded location so asking
+  // several questions about the same place doesn't re-fetch every time.
+  const askIndicatorsCache = new Map();
+  function getAskIndicators(lat, lon) {
+    const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+    if (!askIndicatorsCache.has(key)) {
+      const p = fetch(`${AGROINTEL_API_BASE}/indicators`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lon, include_soil_moisture: false }),
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error(`indicators HTTP ${res.status}`);
+          return res.json();
+        })
+        .catch((err) => {
+          askIndicatorsCache.delete(key);
+          throw err;
+        });
+      askIndicatorsCache.set(key, p);
+    }
+    return askIndicatorsCache.get(key);
+  }
+
+  async function askAgrointel(question) {
+    const typing = showAskTyping();
+    askInput.disabled = true;
+    askSendBtn.disabled = true;
+    try {
+      const loc = activeLocation; // real current map focus, set by the Suitability code above
+      const indicators = await getAskIndicators(loc.lat, loc.lon);
+      const scoreRes = await fetch(`${AGROINTEL_API_BASE}/score`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ indicators }),
+      });
+      const scoreData = scoreRes.ok ? await scoreRes.json() : { comparisons: [] };
+      const chatRes = await fetch(`${AGROINTEL_API_BASE}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          location_label: loc.name || "GreenHarvest North, Central Iowa",
+          indicators,
+        }),
+      });
+      if (!chatRes.ok) throw new Error(`chat HTTP ${chatRes.status}`);
+      const data = await chatRes.json();
+      typing.remove();
+      appendAskMsg(formatBot(data.answer || "No answer returned."), "bot");
+      void scoreData; // fetched so /chat's own scoring call (server-side) has a warm cache path too
+    } catch (err) {
+      typing.remove();
+      console.error("Ask Agro error:", err);
+      appendAskMsg(
+        "<strong>Connection hiccup.</strong> Couldn't reach AGROINTEL AI just now — please try again in a moment.",
+        "bot"
+      );
+      showToast("Ask Agro is temporarily unreachable.");
+    } finally {
+      askInput.disabled = false;
+      askSendBtn.disabled = false;
+      askInput.focus();
+    }
+  }
+
+  /* ---- Lightweight map-control commands, tried before falling through
+     to the real AI - mirrors the pattern already proven on the Crop
+     Rotation Explorer site's chat. ---- */
+  function cleanAskPlaceQuery(q) {
+    return (q || "")
+      .replace(/\bon\s+(the\s+)?(map|earth|globe)\b/gi, "")
+      .replace(/\b(please|thanks?|now)\b/gi, "")
+      .replace(/[?.!]+\s*$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function askGoToPlace(q) {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const results = await res.json();
+      if (!results.length) {
+        appendAskMsg("Sorry, I couldn't find that place.", "bot");
+        return;
+      }
+      const { lat, lon, display_name, boundingbox } = results[0];
+      const target = [parseFloat(lat), parseFloat(lon)];
+      if (searchMarker) map.removeLayer(searchMarker);
+      const label = display_name.length > 70 ? display_name.slice(0, 70) + "…" : display_name;
+      searchMarker = L.marker(target).bindPopup(`<strong>${label}</strong>`).addTo(map);
+      map.flyTo(target, 9, { duration: 1 });
+      const bbox =
+        boundingbox && boundingbox.length === 4
+          ? {
+              south: parseFloat(boundingbox[0]),
+              north: parseFloat(boundingbox[1]),
+              west: parseFloat(boundingbox[2]),
+              east: parseFloat(boundingbox[3]),
+            }
+          : null;
+      await focusSuitabilityOn(parseFloat(lat), parseFloat(lon), display_name, bbox);
+      appendAskMsg(`Showing <strong>${escapeHtml(label)}</strong> on the map.`, "bot");
+    } catch {
+      appendAskMsg("Search unavailable right now — check your connection.", "bot");
+    }
+  }
+
+  const ASK_LAYER_KEYWORDS = {
+    "true color": "MODIS_Terra_CorrectedReflectance_TrueColor",
+    truecolor: "MODIS_Terra_CorrectedReflectance_TrueColor",
+    aqua: "MODIS_Aqua_CorrectedReflectance_TrueColor",
+    ndvi: "MODIS_Terra_NDVI_8Day",
+    vegetation: "MODIS_Terra_NDVI_8Day",
+    temperature: "MODIS_Terra_Land_Surface_Temp_Day",
+    "land surface": "MODIS_Terra_Land_Surface_Temp_Day",
+    heat: "MODIS_Terra_Land_Surface_Temp_Day",
+  };
+  function setAskLayer(lower) {
+    const key = Object.keys(ASK_LAYER_KEYWORDS).find((k) => lower.includes(k));
+    if (!key) return false;
+    layerSelect.value = ASK_LAYER_KEYWORDS[key];
+    refreshNasaLayer();
+    return true;
+  }
+
+  const ASK_MODEL_KEYWORDS = {
+    erosion: "erosion",
+    drought: "drought",
+    "water stress": "drought",
+    nitrogen: "nitrogen",
+    flood: "flood",
+    "crop stress": "stress",
+    season: "stress",
+  };
+  function setAskModel(lower) {
+    const key = Object.keys(ASK_MODEL_KEYWORDS).find((k) => lower.includes(k));
+    if (!key) return false;
+    modelSelect.value = ASK_MODEL_KEYWORDS[key];
+    refreshSuitability();
+    return true;
+  }
+
+  const ASK_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  function scrubAskMonth(lower) {
+    const idx = ASK_MONTHS.findIndex((m) => lower.includes(m));
+    if (idx === -1 || !seasonScrub) return false;
+    seasonScrub.value = String(idx + 1);
+    seasonScrub.dispatchEvent(new Event("input"));
+    return true;
+  }
+
+  // "...in Kenya?" -> "Kenya" - only a capitalized phrase right after
+  // in/for/at/near, so ordinary lowercase words never false-match.
+  function extractAskPlaceMention(raw) {
+    const match = (raw || "").match(/\b(?:in|for|at|near)\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\s*[?.,!]?\s*$/);
+    return match ? match[1].trim() : null;
+  }
+
+  async function handleAskCommand(raw) {
+    const text = (raw || "").trim();
+    if (!text) return;
+    appendAskMsg(escapeHtml(text), "user");
+    askInput.value = "";
+    const lower = text.toLowerCase();
+    const isNavPhrase = !lower.includes("?") && lower.split(/\s+/).length <= 5;
+
+    if (isNavPhrase && (lower.includes("center farm") || lower === "home")) {
+      $("#centerFarmBtn")?.click();
+      appendAskMsg("Centered on the sample farm.", "bot");
+      return;
+    }
+    if (lower.startsWith("go to ") || lower.startsWith("search ")) {
+      const q = cleanAskPlaceQuery(text.replace(/^(go to|search)\s+/i, ""));
+      await askGoToPlace(q);
+      return;
+    }
+    if (isNavPhrase && setAskLayer(lower)) {
+      appendAskMsg("Switched the NASA layer.", "bot");
+      return;
+    }
+    if (isNavPhrase && setAskModel(lower)) {
+      appendAskMsg("Switched the suitability map model.", "bot");
+      return;
+    }
+    if (isNavPhrase && scrubAskMonth(lower)) {
+      appendAskMsg("Moved the season.", "bot");
+      return;
+    }
+
+    const mention = extractAskPlaceMention(text);
+    if (mention) await askGoToPlace(mention);
+
+    await askAgrointel(text);
+  }
+
+  askForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const text = askInput.value.trim();
+    if (!text) return;
+    handleAskCommand(text);
+  });
+
+  askSuggestions?.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip");
+    if (!chip) return;
+    handleAskCommand(chip.dataset.question);
+  });
+
+  askClearBtn?.addEventListener("click", () => {
+    askMessages.innerHTML = "";
+    appendAskMsg(WELCOME_MSG, "bot");
+    showToast("Conversation cleared.");
+  });
+
+  if (askStatusDot) askStatusDot.classList.add("ok");
+  if (askStatusText) askStatusText.textContent = "Online — grounded in real NASA data, no key needed";
+  if (askMessages) appendAskMsg(WELCOME_MSG, "bot");
 })();
 
 /* ==========================================================
