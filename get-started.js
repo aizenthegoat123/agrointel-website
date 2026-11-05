@@ -35,6 +35,10 @@ if (mode === "signin") {
   const signinForm = $("#signinForm");
   const signinDone = $("#signinDone");
   const signinDoneEmail = $("#signinDoneEmail");
+  // Where "sign in" takes the user afterward - the real map + Ask Agro AI
+  // section, not just another marketing page. ?next= lets a caller point
+  // this at a different in-site destination if ever needed.
+  const nextDestination = params.get("next") || "index.html#analysis";
   signinForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const email = signinEmail.value.trim();
@@ -45,6 +49,12 @@ if (mode === "signin") {
     signinDoneEmail.textContent = email;
     signinForm.hidden = true;
     signinDone.hidden = false;
+    // Demo build: no real magic-link email/auth, so "signed in" is
+    // simulated here - redirects straight to the real functional page
+    // after a brief pause instead of leaving the user on a dead end.
+    setTimeout(() => {
+      window.location.href = nextDestination;
+    }, 1600);
   });
 } else {
   wizardPanel.hidden = false;
