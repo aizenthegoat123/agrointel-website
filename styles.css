@@ -1962,7 +1962,7 @@ body {
   min-height: 560px;
   max-height: 560px; /* fixed card height - messages scroll inside it, the card itself never grows */
 }
-.ask-chat-header { background: linear-gradient(180deg, #f2f5ec, #eef1e6); }
+.ask-chat-header { background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
 .model-badge {
   display: inline-block;
   vertical-align: 1px;
