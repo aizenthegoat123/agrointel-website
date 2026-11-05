@@ -28,6 +28,8 @@
   --fill-950: #0e2f23;
   --fill-900: #14532d;
   --fill-800: #166534;
+  --fill-ink: #16281f;
+  --fill-ink-soft: #2c4234;
 
   --amber: #d97706;
   --red: #dc2626;
@@ -376,7 +378,7 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--green-900);
+  color: var(--fill-900); /* this chip's own background is always light, so its text must always be dark too */
   background: #eef7e6;
   border: 1px solid #d8ecc9;
   border-radius: 999px;
@@ -464,7 +466,7 @@ body {
 .dash-badge {
   margin-left: auto;
   font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em;
-  color: var(--green-900); background: var(--lime-soft);
+  color: var(--fill-900); background: var(--lime-soft);
   padding: 0.25rem 0.6rem; border-radius: 999px;
 }
 .dash-body {
@@ -512,7 +514,7 @@ body {
 .diag-rec {
   display: flex; gap: 0.4rem; align-items: flex-start;
   font-size: 0.72rem; line-height: 1.45; color: var(--green-900);
-  background: #ffffff; border: 1px solid #dfe7d8;
+  background: var(--surface); border: 1px solid var(--line);
   padding: 0.5rem 0.6rem; border-radius: 10px; margin-top: 0.15rem;
 }
 .diag-rec svg { color: var(--green-700); flex-shrink: 0; margin-top: 1px; }
@@ -528,8 +530,8 @@ body {
 .ch-row {
   display: flex; align-items: center; gap: 0.45rem;
   font-size: 0.74rem;
-  background: #fff;
-  border: 1px solid #e2e8da;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0.34rem 0.5rem;
 }
@@ -538,7 +540,10 @@ body {
 .ch-val { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--green-950); }
 .ch-row.ok .ch-dot { background: var(--green-500); }
 .ch-row.watch .ch-dot { background: #eab308; }
+/* Alert rows keep a fixed light-red tint (a status color, not a theme
+   surface) in both themes, so their own text is pinned dark to match. */
 .ch-row.alert { border-color: #fecaca; background: #fff7f5; }
+.ch-row.alert .ch-name { color: var(--fill-ink-soft); }
 .ch-row.alert .ch-dot { background: var(--red); animation: ping 1.8s cubic-bezier(0,0,0.2,1) infinite; }
 .ch-row.alert .ch-val { color: #b91c1c; }
 
@@ -775,7 +780,7 @@ body {
 .step-chip {
   margin-top: auto;
   font-size: 0.76rem;
-  color: var(--green-900);
+  color: var(--fill-900);
   background: #eef7e6;
   border: 1px dashed #bfe3b4;
   border-radius: 10px;
@@ -897,7 +902,7 @@ body {
 .chip {
   font-family: var(--font-body);
   font-size: 0.76rem; font-weight: 600;
-  color: var(--green-900);
+  color: var(--fill-900);
   background: #eef7e6;
   border: 1px solid #d5e8cd;
   padding: 0.38rem 0.8rem;
@@ -983,19 +988,19 @@ body {
   font-family: var(--font-body);
   font-size: 0.88rem;
   color: var(--ink);
-  background: #f7f8f4;
+  background: var(--surface-2);
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   padding: 0.5rem 0.65rem;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s, color 0.2s;
 }
 .toolbar-field select:focus,
 .toolbar-field input[type="date"]:focus,
 .search-row input:focus {
   border-color: var(--green-700);
   box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.14);
-  background: #fff;
+  background: var(--surface);
 }
 .toolbar-opacity label { display: flex; justify-content: space-between; gap: 0.5rem; }
 .toolbar-opacity output { color: var(--green-800); font-variant-numeric: tabular-nums; }
@@ -1146,10 +1151,11 @@ body {
 .suitability-panel select {
   font-family: var(--font-body);
   font-size: 0.9rem;
+  color: var(--ink);
   border: 1px solid var(--line-strong);
   border-radius: 9px;
   padding: 0.55rem 0.65rem;
-  background: #f7f8f4;
+  background: var(--surface-2);
   outline: none;
 }
 .suitability-panel select:focus { border-color: var(--green-700); box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.14); }
@@ -1256,7 +1262,7 @@ body {
 .climate-icon {
   width: 56px; height: 56px;
   flex-shrink: 0;
-  color: var(--green-900);
+  color: var(--fill-900);
   background: #fdeeda;
   border-radius: 16px;
   padding: 8px;
@@ -1420,7 +1426,7 @@ body {
 .crop-tile.hide { display: none; }
 .crop-icon {
   width: 56px; height: 56px;
-  color: var(--green-800);
+  color: var(--fill-800);
   background: #eef6e8;
   border-radius: 14px;
   padding: 8px;
