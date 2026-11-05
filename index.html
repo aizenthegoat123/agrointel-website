@@ -1,618 +1,855 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Crop Rotation Explorer | NASA Earth Data Decision Support</title>
+  <meta name="description" content="AgroIntel pairs satellite imagery, leaf-level AI diagnosis and a 24/7 agronomist chatbot to help farms catch disease early, irrigate smarter and lift yields by up to 38%." />
+  <title>AgroIntel — AI Agronomy for Every Acre</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314532d'/%3E%3Cpath d='M22.5 9.5c-6.5.6-10.8 3.4-13 8.6-.8 1.9-1.2 3.9-1.2 5.4 1.5 0 3.5-.4 5.4-1.2 5.2-2.2 8-6.5 8.8-12.8z' fill='%23a3e635'/%3E%3Cpath d='M11 22c3.5-6 8-10 12.5-12.5C19 15 14.5 19 11 22z' fill='%2322c55e'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <header class="hero">
-    <div class="hero-content">
-      <!-- Logo -->
-      <div class="hero-logo">
-        <svg class="logo-svg" viewBox="0 0 64 64" width="72" height="72" aria-hidden="true">
-          <circle cx="32" cy="32" r="28" fill="#1b4332" stroke="#52b788" stroke-width="2.5"/>
-          <path d="M32 14 C22 22 18 34 22 46 C26 40 30 36 32 36 C34 36 38 40 42 46 C46 34 42 22 32 14 Z" fill="#52b788"/>
-          <path d="M32 36 L32 50" stroke="#d8f3dc" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="48" cy="18" r="4" fill="#f4a261"/>
-          <circle cx="48" cy="18" r="1.8" fill="#fff"/>
-        </svg>
-      </div>
-      <div class="badge"><i class="fas fa-satellite"></i> NASA Earth Observations + Local Ag Insights</div>
-      <h1>Crop Rotation Explorer</h1>
-      <p class="tagline">
-        Explore how different crop rotations can improve soil health, reduce water stress,
-        and build resilience using NASA satellite data and agricultural knowledge.
-      </p>
-      <div class="hero-actions">
-        <a href="#map-section" class="btn primary"><i class="fas fa-map-marked-alt"></i> Explore Map</a>
-        <a href="#strategies" class="btn secondary"><i class="fas fa-seedling"></i> Compare Rotations</a>
-      </div>
-    </div>
-    <div class="hero-bg"></div>
-  </header>
+<body id="top">
 
-  <nav class="top-nav">
-    <div class="nav-inner">
-      <a href="#" class="logo">
-        <svg class="logo-svg-sm" viewBox="0 0 64 64" width="36" height="36" aria-hidden="true">
-          <circle cx="32" cy="32" r="28" fill="#1b4332" stroke="#52b788" stroke-width="2.5"/>
-          <path d="M32 14 C22 22 18 34 22 46 C26 40 30 36 32 36 C34 36 38 40 42 46 C46 34 42 22 32 14 Z" fill="#52b788"/>
-          <path d="M32 36 L32 50" stroke="#d8f3dc" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="48" cy="18" r="4" fill="#f4a261"/>
-          <circle cx="48" cy="18" r="1.8" fill="#fff"/>
-        </svg>
-        <span>CropRot NASA</span>
+  <!-- Announcement bar -->
+  <div class="announce" id="announceBar" role="status">
+    <div class="container announce-inner">
+      <span class="announce-dot" aria-hidden="true"></span>
+      <p><strong>FieldVision&trade; 2.0 is live</strong> — early-blight detection at 94% precision across 40 crops.</p>
+      <a href="#ask" class="announce-link">Ask Agro now
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M13.2 5.2 19 11h-6.6v2H19l-5.8 5.8-1.4-1.4 4-4H4.6v-2h11.2l-4-4z"/></svg>
       </a>
-      <div class="nav-links">
-        <a href="#priorities">My Priorities</a>
-        <a href="#map-section">Map</a>
-        <a href="#climate">Climate & Soil</a>
-        <a href="#strategies">Rotations</a>
-        <a href="#details">Details</a>
-        <a href="#about">About</a>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Location & Farm Context -->
-  <section class="section context-section">
-    <div class="container">
-      <h2><i class="fas fa-map-pin"></i> Sample Study Area</h2>
-      <p class="section-desc">
-        Demonstration focused on a representative Midwest farm near Ames, Iowa
-        (≈ 42.03° N, 93.63° W). Data can be adapted to any location using NASA POWER and GIBS.
-      </p>
-      <div class="context-grid">
-        <div class="info-card">
-          <h3>Location</h3>
-          <p>Central Iowa, USA<br>Corn Belt region</p>
-        </div>
-        <div class="info-card">
-          <h3>Typical Soils</h3>
-          <p>Mollisols – high organic matter potential, good for continuous corn/soy but vulnerable to compaction & erosion when bare.</p>
-        </div>
-        <div class="info-card">
-          <h3>Climate Challenges</h3>
-          <p>Variable spring rainfall, summer heat stress, increasing extreme precipitation events, winter freeze-thaw cycles.</p>
-        </div>
-        <div class="info-card">
-          <h3>Current Practice</h3>
-          <p>Dominant 2-year Corn–Soybean rotation with limited cover crops.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-
-  <!-- Farmer Priorities (Farmer-Centered) -->
-  <section id="priorities" class="section priorities-section">
-    <div class="container">
-      <h2><i class="fas fa-user-check"></i> Your Farm Priorities</h2>
-      <p class="section-desc">
-        Tell us what matters most on <strong>your</strong> farm. This helps highlight which rotation ideas may fit best.
-        You can change these anytime. Nothing is saved on a server — it stays in your browser.
-      </p>
-
-      <div class="priorities-card">
-        <div class="priorities-grid">
-          <div class="priority-group">
-            <h3><i class="fas fa-tint"></i> Water & Weather</h3>
-            <label class="check-label"><input type="checkbox" name="priority" value="water-scarce"> Limited water / frequent dry spells</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="heavy-rain"> Heavy rain & erosion concerns</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="heat-stress"> Summer heat stress on crops</label>
-          </div>
-
-          <div class="priority-group">
-            <h3><i class="fas fa-tractor"></i> Equipment & Labor</h3>
-            <label class="check-label"><input type="checkbox" name="priority" value="limited-equip"> Limited equipment for small grains / forage</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="labor-tight"> Tight labor / want simpler management</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="no-till"> Prefer no-till or reduced tillage</label>
-          </div>
-
-          <div class="priority-group">
-            <h3><i class="fas fa-store"></i> Markets & Income</h3>
-            <label class="check-label"><input type="checkbox" name="priority" value="grain-market"> Strong local grain markets (corn/soy)</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="forage-market"> Access to hay / livestock markets</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="cash-flow"> Need steady short-term cash flow</label>
-          </div>
-
-          <div class="priority-group">
-            <h3><i class="fas fa-seedling"></i> Soil & Long-term Goals</h3>
-            <label class="check-label"><input type="checkbox" name="priority" value="build-om"> Build organic matter / soil health</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="break-pests"> Break pest or disease cycles</label>
-            <label class="check-label"><input type="checkbox" name="priority" value="n-fix"> Reduce synthetic nitrogen use</label>
-          </div>
-        </div>
-
-        <div class="priorities-actions">
-          <button id="apply-priorities" class="btn primary"><i class="fas fa-magic"></i> Show Matching Ideas</button>
-          <button id="reset-priorities" class="btn small secondary">Reset</button>
-        </div>
-
-        <div id="priority-result" class="priority-result" hidden>
-          <h3><i class="fas fa-lightbulb"></i> Based on what you selected</h3>
-          <p id="priority-summary"></p>
-          <div id="priority-suggestions" class="suggestion-chips"></div>
-          <p class="priority-note">
-            <strong>Remember:</strong> These are ideas to discuss with your local agronomist, Extension agent, or trusted advisor.
-            Your soil tests, field history, and business goals matter more than any map or model.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Interactive Map -->
-  <section id="map-section" class="section map-section">
-    <div class="container">
-      <h2><i class="fas fa-globe-americas"></i> Interactive Earth Observation Map</h2>
-      <p class="section-desc">
-        Explore satellite views, field-level vulnerability zones, and simple “what-if” climate scenarios.
-        Click fields for details. Use the timeline and overlays to see how conditions change.
-      </p>
-      <div class="simple-tip">
-        <strong>Tip:</strong> You do not need to understand every satellite layer. Start with True Color or NDVI,
-        then try the vulnerability overlays and the scenario slider below the map.
-      </div>
-
-      <div class="map-controls">
-        <label>Base Map:
-          <select id="base-layer">
-            <option value="sat">Satellite (Esri)</option>
-            <option value="osm">OpenStreetMap</option>
-          </select>
-        </label>
-        <label>NASA Layer:
-          <select id="gibs-layer">
-            <option value="MODIS_Terra_CorrectedReflectance_TrueColor">MODIS Terra True Color</option>
-            <option value="MODIS_Aqua_CorrectedReflectance_TrueColor">MODIS Aqua True Color</option>
-            <option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">VIIRS True Color</option>
-            <option value="MODIS_Terra_CorrectedReflectance_Bands721">MODIS Bands 7-2-1 (Ag)</option>
-            <option value="MODIS_Terra_NDVI_8Day">MODIS NDVI (Vegetation)</option>
-            <option value="MODIS_Terra_Land_Surface_Temp_Day">Land Surface Temp</option>
-          </select>
-        </label>
-        <label>Date:
-          <input type="date" id="gibs-date" value="2025-07-15" />
-        </label>
-        <label>Opacity:
-          <input type="range" id="layer-opacity" min="0.2" max="1" step="0.05" value="0.75" />
-        </label>
-        <button id="locate-farm" class="btn small secondary"><i class="fas fa-crosshairs"></i> Center Farm</button>
-        <label class="search-label">Search place:
-          <input type="text" id="place-search" placeholder="City, farm, country..." />
-        </label>
-        <button id="search-place-btn" class="btn small"><i class="fas fa-search"></i> Go</button>
-      </div>
-
-      <div class="map-layout">
-        <div class="map-main">
-          <div id="map"></div>
-          <div class="map-legend">
-            <span><span class="dot corn"></span> Corn Field</span>
-            <span><span class="dot soy"></span> Soy Field</span>
-            <span><span class="dot cover"></span> Diversification Area</span>
-          </div>
-        </div>
-        <div class="map-side">
-          <h3><i class="fas fa-layer-group"></i> Suitability Model</h3>
-          <p class="side-hint">Real, NASA-data-driven values sampled across the area currently shown, smoothed into a heatmap for readability — the color is interpolated between real sample points, not a per-pixel satellite image. Switch models to see different real conditions.</p>
-          <label class="check-label"><input type="checkbox" id="si-toggle" checked> Show Suitability Heatmap</label>
-          <label>Map Model:
-            <select id="si-model-select">
-              <option value="erosion">Erosion Risk</option>
-              <option value="water">Water Stress</option>
-              <option value="temp">Temperature Anomaly</option>
-              <option value="resilience">Climate Resilience</option>
-              <option value="suitability">Overall Suitability</option>
-            </select>
-          </label>
-          <div id="si-status" class="si-status"></div>
-          <div id="si-legend" class="si-legend"></div>
-
-          <h3 style="margin-top:1.25rem"><i class="fas fa-clock"></i> Timeline (season)</h3>
-          <p class="side-hint">Slide to approximate seasonal conditions for the sample farm.</p>
-          <input type="range" id="season-slider" min="0" max="3" step="1" value="2" />
-          <div class="season-labels">
-            <span>Spring</span><span>Early Summer</span><span>Peak Summer</span><span>Fall</span>
-          </div>
-          <p id="season-note" class="season-note">Peak summer: higher heat stress and soil-moisture drawdown risk.</p>
-
-          <h3 style="margin-top:1.25rem"><i class="fas fa-sliders-h"></i> Scenario Slider</h3>
-          <p class="side-hint">Explore a simple “what-if” on rainfall and temperature (illustrative only).</p>
-          <label>Rainfall change: <span id="rain-val">0%</span></label>
-          <input type="range" id="rain-slider" min="-30" max="30" step="5" value="0" />
-          <label>Temperature change: <span id="temp-val">0°C</span></label>
-          <input type="range" id="temp-slider" min="-2" max="3" step="0.5" value="0" />
-          <p id="scenario-note" class="season-note">Current climate baseline for the sample area.</p>
-        </div>
-      </div>
-
-      <div class="trends-panel">
-        <h3><i class="fas fa-chart-line"></i> Long-term Trends (sample area)</h3>
-        <p class="section-desc" style="margin-bottom:1rem">
-          Illustrative patterns based on NASA POWER, SMAP concepts, and regional GRACE/GRACE-FO style water-storage signals.
-          These help frame rotation choices; they are not farm-specific forecasts.
-        </p>
-        <div class="trends-grid">
-          <div class="trend-card">
-            <h4>Soil Moisture</h4>
-            <p>Surface moisture often drops quickly after mid-summer storms. Bare fields after soybean harvest hold less water and lose more to runoff in intense rain.</p>
-            <div class="trend-bar"><div class="trend-fill" style="width:55%"></div></div>
-            <span class="trend-label">Moderate variability · higher risk when bare</span>
-          </div>
-          <div class="trend-card">
-            <h4>Heat Waves</h4>
-            <p>More frequent warm spells raise canopy stress, especially on continuous corn. Living cover and higher organic matter can moderate surface temperatures.</p>
-            <div class="trend-bar hot"><div class="trend-fill" style="width:70%"></div></div>
-            <span class="trend-label">Increasing exposure in peak summer</span>
-          </div>
-          <div class="trend-card">
-            <h4>Water Storage (regional)</h4>
-            <p>Long-term groundwater and soil-water signals point to the value of rotations that improve infiltration and reduce evaporative demand.</p>
-            <div class="trend-bar water"><div class="trend-fill" style="width:40%"></div></div>
-            <span class="trend-label">Watch long-term declines · build resilience</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Climate & Soil Insights -->
-  <section id="climate" class="section climate-section">
-    <div class="container">
-      <h2><i class="fas fa-cloud-sun-rain"></i> Climate & Soil Moisture Patterns</h2>
-      <p class="section-desc">
-        These charts show temperature and rainfall for the sample area (using free NASA climate data).
-        You can load real numbers for 2023–2024. The notes below explain what the patterns may mean for soil and crops —
-        in everyday language.
-      </p>
-      <div class="climate-controls">
-        <button id="load-power" class="btn primary"><i class="fas fa-download"></i> Load NASA POWER Data (2023–2024)</button>
-        <span id="power-status" class="status"></span>
-      </div>
-      <div class="charts-grid">
-        <div class="chart-card">
-          <h3>Daily Precipitation (mm)</h3>
-          <canvas id="precip-chart"></canvas>
-        </div>
-        <div class="chart-card">
-          <h3>Temperature (°C) – Max / Mean / Min</h3>
-          <canvas id="temp-chart"></canvas>
-        </div>
-      </div>
-      <div class="insights-grid">
-        <div class="insight-card">
-          <i class="fas fa-tint"></i>
-          <h4>Soil Moisture Windows</h4>
-          <p>SMAP-derived surface soil moisture often shows rapid drying after mid-summer storms. Fields left bare after soybean harvest have lower infiltration and higher runoff risk during intense GPM-observed rainfall events.</p>
-        </div>
-        <div class="insight-card">
-          <i class="fas fa-thermometer-half"></i>
-          <h4>Heat & Vegetation Stress</h4>
-          <p>ECOSTRESS and MODIS land surface temperature indicate higher canopy stress on continuous corn in dry spells. Diversified rotations with deeper-rooted crops or covers can moderate surface temperatures.</p>
-        </div>
-        <div class="insight-card">
-          <i class="fas fa-water"></i>
-          <h4>Long-term Water Trends</h4>
-          <p>GRACE/GRACE-FO regional groundwater signals and NASA POWER precipitation trends highlight the value of rotations that improve infiltration and reduce evaporative demand during critical growth stages.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Rotation Strategies -->
-  <section id="strategies" class="section strategies-section">
-    <div class="container">
-      <h2><i class="fas fa-sync-alt"></i> Compare Rotation Strategies</h2>
-      <p class="section-desc">
-        Below are three rotation ideas, including the common corn–soy system many farms already use.
-        Each one explains why it might help, what the satellite and research data suggest,
-        and what you should double-check with a local expert before changing anything on your farm.
-      </p>
-      <div class="farmer-reminder">
-        <i class="fas fa-exclamation-triangle"></i>
-        <p><strong>This tool does not tell you what to plant.</strong> It only shows patterns and possibilities.
-        Your soil tests, yield history, equipment, landlord agreements, and market contracts are more important
-        than any map or model. Always talk with your agronomist, Extension agent, or trusted advisor before making changes.</p>
-      </div>
-
-      <div class="strategy-tabs">
-        <button class="tab-btn active" data-tab="current">1. Existing Corn–Soy</button>
-        <button class="tab-btn" data-tab="diverse">2. Diversified + Small Grain</button>
-        <button class="tab-btn" data-tab="soil">3. Soil-Building + Forage</button>
-      </div>
-
-      <div class="tab-content active" id="tab-current">
-        <div class="strategy-header">
-          <h3>Existing Rotation: Continuous Corn–Soybean (2-year)</h3>
-          <span class="badge neutral">Baseline</span>
-        </div>
-        <div class="strategy-body">
-          <div class="strategy-col">
-            <h4>Why this is common</h4>
-            <p>High market demand, established equipment, strong short-term returns, and familiarity. Soybean provides some nitrogen credit for the following corn.</p>
-            <h4>Supporting patterns</h4>
-            <ul>
-              <li>MODIS NDVI shows strong peak biomass in both crops under good conditions.</li>
-              <li>NASA POWER precipitation supports adequate water in average years for both crops.</li>
-            </ul>
-            <h4>Benefits</h4>
-            <ul>
-              <li>Simple management and marketing.</li>
-              <li>Relatively high short-term profitability in good years.</li>
-            </ul>
-          </div>
-          <div class="strategy-col">
-            <h4>Limitations observed</h4>
-            <ul>
-              <li>Long periods of bare soil after harvest → higher erosion risk during intense rainfall (GPM extremes).</li>
-              <li>Build-up of soybean cyst nematode and other pests with short rotations.</li>
-              <li>Limited organic matter accumulation and poorer infiltration compared with more diverse systems.</li>
-              <li>Higher fertilizer N needs for corn phase.</li>
-            </ul>
-            <h4>Information gaps & risks</h4>
-            <p>Local soil tests, nematode pressure, and exact market contracts are essential. Extreme weather years can still cause large yield swings. This tool does not replace on-farm trials or advisor recommendations.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="tab-content" id="tab-diverse">
-        <div class="strategy-header">
-          <h3>Diversified Rotation: Corn – Soybean – Winter Wheat / Oats + Cover Crops</h3>
-          <span class="badge positive">Recommended for Resilience</span>
-        </div>
-        <div class="strategy-body">
-          <div class="strategy-col">
-            <h4>Why suggested</h4>
-            <p>Adds a small grain to break pest cycles, keep living roots longer, reduce bare-soil windows, and improve soil structure. Research across the Midwest shows yield stability gains and reduced nitrate leaching.</p>
-            <h4>Evidence support</h4>
-            <ul>
-              <li>Longer living-root periods improve infiltration (beneficial under high-intensity precipitation events seen in GPM data).</li>
-              <li>Small grains can utilize residual N and reduce tile nitrate losses.</li>
-              <li>MODIS/ECOSTRESS patterns suggest moderated heat stress with better soil cover.</li>
-              <li>University trials (Minnesota, Illinois, Nebraska, Ohio) document improved soil health indicators and corn yield stability.</li>
-            </ul>
-            <h4>Potential benefits</h4>
-            <ul>
-              <li>Interrupts pest & disease cycles (e.g., SCN).</li>
-              <li>Better erosion control and organic matter trend.</li>
-              <li>Possible double-crop or forage opportunity after wheat.</li>
-              <li>Improved water infiltration and drought buffering.</li>
-            </ul>
-          </div>
-          <div class="strategy-col">
-            <h4>Information gaps</h4>
-            <p>Local markets for wheat/oats, equipment availability for small grains, and precise cover-crop termination timing need farmer/expert input. Yield of the third crop varies with weather.</p>
-            <h4>Risks requiring local review</h4>
-            <ul>
-              <li>Learning curve and possible short-term yield dip while system adjusts.</li>
-              <li>Herbicide carryover constraints.</li>
-              <li>Market price volatility for small grains.</li>
-            </ul>
-            <p class="note">This is a decision-support suggestion only. Validate with local Extension and on-farm experimentation.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="tab-content" id="tab-soil">
-        <div class="strategy-header">
-          <h3>Soil-Building Rotation: Corn – Soybean – Alfalfa / Mixed Forage (or Oats + Legume)</h3>
-          <span class="badge positive">Strong Soil Health Focus</span>
-        </div>
-        <div class="strategy-body">
-          <div class="strategy-col">
-            <h4>Why suggested</h4>
-            <p>Perennial or multi-year forages add deep roots, continuous cover, biological nitrogen fixation, and significant organic matter. Long-term Ohio and Nebraska studies show higher and more stable corn yields after forage phases, especially under no-till.</p>
-            <h4>Evidence support</h4>
-            <ul>
-              <li>Deep roots improve soil structure and water holding capacity — valuable under variable SMAP soil-moisture regimes.</li>
-              <li>Nitrogen fixation reduces synthetic N needs for subsequent corn.</li>
-              <li>Near-continuous cover dramatically cuts erosion during extreme precipitation.</li>
-              <li>Improved aggregate stability and microbial activity reported in long-term trials.</li>
-            </ul>
-            <h4>Potential benefits</h4>
-            <ul>
-              <li>Highest potential soil organic matter gains.</li>
-              <li>Supplemental forage income or livestock integration.</li>
-              <li>Strongest resilience to drought and intense rain.</li>
-              <li>Breaks pest cycles most effectively.</li>
-            </ul>
-          </div>
-          <div class="strategy-col">
-            <h4>Information gaps</h4>
-            <p>Requires livestock or reliable forage markets. Establishment cost and multi-year commitment. Local soil pH, drainage, and weed pressure must be assessed.</p>
-            <h4>Risks requiring local review</h4>
-            <ul>
-              <li>Cash-flow timing (forage years vs. grain years).</li>
-              <li>Termination and transition back to annuals needs careful planning.</li>
-              <li>Not suitable for every farm business model.</li>
-            </ul>
-            <p class="note">Best suited where livestock or hay markets exist, or where long-term soil capital is a priority. Always consult local experts.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Detailed Comparison Table -->
-  <section id="details" class="section details-section">
-    <div class="container">
-      <h2><i class="fas fa-table"></i> Side-by-Side Comparison</h2>
-      <div class="table-wrapper">
-        <table class="comparison-table">
-          <thead>
-            <tr>
-              <th>Aspect</th>
-              <th>1. Corn–Soy (Existing)</th>
-              <th>2. Corn–Soy–Wheat + Cover</th>
-              <th>3. Corn–Soy–Alfalfa/Forage</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Soil Cover Duration</td>
-              <td>Low–Moderate</td>
-              <td>High</td>
-              <td>Very High</td>
-            </tr>
-            <tr>
-              <td>Pest Cycle Break</td>
-              <td>Weak</td>
-              <td>Good</td>
-              <td>Excellent</td>
-            </tr>
-            <tr>
-              <td>Nitrogen Fixation / Credit</td>
-              <td>Moderate (soy)</td>
-              <td>Moderate + residual capture</td>
-              <td>High (legume forage)</td>
-            </tr>
-            <tr>
-              <td>Erosion & Runoff Risk</td>
-              <td>Higher (bare periods)</td>
-              <td>Lower</td>
-              <td>Lowest</td>
-            </tr>
-            <tr>
-              <td>Organic Matter Trend</td>
-              <td>Stable to slight decline</td>
-              <td>Improving</td>
-              <td>Strongest improvement</td>
-            </tr>
-            <tr>
-              <td>Water Infiltration / Drought Buffer</td>
-              <td>Baseline</td>
-              <td>Improved</td>
-              <td>Best</td>
-            </tr>
-            <tr>
-              <td>Market Complexity</td>
-              <td>Simple</td>
-              <td>Moderate</td>
-              <td>Higher (forage/livestock)</td>
-            </tr>
-            <tr>
-              <td>Short-term Cash Flow</td>
-              <td>Strong</td>
-              <td>Good</td>
-              <td>Variable</td>
-            </tr>
-            <tr>
-              <td>Resilience to Extreme Weather</td>
-              <td>Moderate</td>
-              <td>Good</td>
-              <td>High</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="farmer-reminder">
-        <i class="fas fa-handshake"></i>
-        <p>
-          <strong>Human judgment comes first.</strong> This tool only helps you explore options.
-          Places where your local knowledge is especially important:
-        </p>
-      </div>
-      <ul style="margin: 0.75rem 0 1.25rem 1.5rem; line-height: 1.6;">
-        <li>Your actual soil test results and drainage</li>
-        <li>Landlord or bank requirements</li>
-        <li>Equipment you already own (or can rent)</li>
-        <li>Local markets and delivery contracts</li>
-        <li>Weed, insect, and disease pressure you have seen in recent years</li>
-        <li>Your own comfort with trying something new</li>
-      </ul>
-      <p class="disclaimer">
-        <strong>Important:</strong> Patterns from NASA satellites and university research are useful starting points,
-        but they never replace the knowledge of the person who walks the field. Use this tool to ask better questions —
-        then decide together with people who know your ground.
-      </p>
-    </div>
-  </section>
-
-  <!-- About / Data Sources -->
-  <section id="about" class="section about-section">
-    <div class="container">
-      <h2><i class="fas fa-info-circle"></i> About This Tool & Data Sources</h2>
-      <div class="about-grid">
-        <div>
-          <h3>NASA Datasets Referenced</h3>
-          <ul>
-            <li><strong>SMAP</strong> – Soil moisture</li>
-            <li><strong>GPM</strong> – Precipitation extremes</li>
-            <li><strong>MODIS / VIIRS</strong> – Vegetation (NDVI), true color, land surface temperature</li>
-            <li><strong>ECOSTRESS</strong> – Evapotranspiration & heat stress concepts</li>
-            <li><strong>NASA POWER</strong> – Temperature, precipitation, humidity (live API used)</li>
-            <li><strong>GRACE / GRACE-FO</strong> – Regional water storage trends</li>
-            <li><strong>SRTM</strong> – Elevation context</li>
-          </ul>
-        </div>
-        <div>
-          <h3>How to Adapt</h3>
-          <p>
-            Change the latitude/longitude in the JavaScript for any farm.
-            Update the GIBS date and layer for recent imagery.
-            The NASA POWER fetch can be pointed at any coordinates.
-            Local soil surveys (SSURGO), yield history, and farmer priorities should be layered on top.
-          </p>
-          <h3>Intended Use</h3>
-          <p>
-            Supportive exploration of options that may improve soil health and climate resilience.
-            Final decisions remain with the farmer and local experts.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <footer>
-    <div class="container">
-      <div class="footer-logo">
-        <svg viewBox="0 0 64 64" width="40" height="40" aria-hidden="true">
-          <circle cx="32" cy="32" r="28" fill="#1b4332" stroke="#52b788" stroke-width="2.5"/>
-          <path d="M32 14 C22 22 18 34 22 46 C26 40 30 36 32 36 C34 36 38 40 42 46 C46 34 42 22 32 14 Z" fill="#52b788"/>
-          <path d="M32 36 L32 50" stroke="#d8f3dc" stroke-width="2" stroke-linecap="round"/>
-          <circle cx="48" cy="18" r="4" fill="#f4a261"/>
-          <circle cx="48" cy="18" r="1.8" fill="#fff"/>
-        </svg>
-      </div>
-      <p>Crop Rotation Explorer — Decision-support prototype using open NASA Earth data.</p>
-      <p class="small">Not an official NASA product. For educational and exploratory purposes.</p>
-    </div>
-  </footer>
-
-
-  <!-- Chatbot -->
-  <div id="chatbot" class="chatbot">
-    <button id="chat-toggle" class="chat-toggle" aria-label="Open chat">
-      <i class="fas fa-comments"></i>
-    </button>
-    <div id="chat-panel" class="chat-panel" hidden>
-      <div class="chat-header">
-        <span><i class="fas fa-robot"></i> CropRot Assistant</span>
-        <button id="chat-close" class="chat-close">&times;</button>
-      </div>
-      <div id="chat-messages" class="chat-messages">
-        <div class="chat-msg bot">
-          Hi! I can help you explore the map and rotations.<br>
-          Try: <em>"go to Iowa"</em>, <em>"show rain"</em>, <em>"show NDVI"</em>,
-          <em>"center farm"</em>, <em>"show erosion"</em>, or ask about rotations.
-        </div>
-      </div>
-      <div class="chat-input-row">
-        <input type="text" id="chat-input" placeholder="Type a command or question..." />
-        <button id="chat-send" class="btn small primary">Send</button>
-      </div>
+      <button class="announce-close" id="announceClose" aria-label="Dismiss announcement">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12 19 6.4 17.6 5 12 10.6z"/></svg>
+      </button>
     </div>
   </div>
 
+  <!-- Navbar -->
+  <header class="nav" id="navbar">
+    <div class="container nav-inner">
+      <a href="#top" class="logo" aria-label="AgroIntel home">
+        <svg class="logo-mark" viewBox="0 0 32 32" width="34" height="34" aria-hidden="true">
+          <rect width="32" height="32" rx="9" fill="#14532d"/>
+          <path d="M22.6 9.4c-6.6.6-11 3.5-13.2 8.8-.8 2-1.2 4-1.2 5.4 1.5 0 3.4-.4 5.5-1.2 5.3-2.2 8.1-6.6 8.9-13z" fill="#a3e635"/>
+          <path d="M11.2 22.2c3.6-6.1 8.2-10.2 12.7-12.7-4.6 5-9.1 9.4-12.7 12.7z" fill="#22c55e"/>
+        </svg>
+        <span class="logo-word">Agro<em>Intel</em></span>
+      </a>
+
+      <nav class="nav-links" id="navLinks" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#analysis">NASA Live</a>
+        <a href="#ask">Ask Agro</a>
+        <a href="#crops">Crops</a>
+        <a href="#pricing">Pricing</a>
+      </nav>
+
+      <div class="nav-cta">
+        <a href="get-started.html?mode=signin" class="btn btn-ghost btn-sm hide-sm">Sign in</a>
+        <a href="get-started.html" class="btn btn-primary btn-sm">Get started
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
+        </a>
+        <button class="hamburger" id="hamburger" aria-label="Toggle menu" aria-expanded="false" aria-controls="navLinks">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ HERO ============ -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <span class="pill"><span class="pill-pulse" aria-hidden="true"></span> FieldVision&trade; AI 2.0 — now in 28 languages</span>
+          <h1 class="display">See what your crops need, <em>before</em> they tell you.</h1>
+          <p class="lede">AgroIntel fuses <strong>NASA satellite imagery</strong>, <strong>NASA POWER climate records</strong> and a <strong>Gemini-powered agronomist</strong> — so you catch disease weeks earlier, irrigate with root-zone wetness data and spray only when it counts.</p>
+          <div class="hero-ctas">
+            <a href="get-started.html" class="btn btn-primary btn-lg">Start free trial
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
+            </a>
+            <a href="#ask" class="btn btn-outline btn-lg">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-5 4V6a2 2 0 0 1 1-2zm4 6h8v2H8zm0-3.5h8v2H8z"/></svg>
+              Ask Agro — live AI
+            </a>
+          </div>
+          <p class="nasa-badge"><span class="nasa-badge-dot" aria-hidden="true"></span>Powered by open NASA data — <strong>GIBS · POWER · Worldview</strong></p>
+          <div class="hero-trust">
+            <div class="avatars" aria-hidden="true">
+              <span class="avatar a1">MK</span><span class="avatar a2">TH</span><span class="avatar a3">SW</span><span class="avatar a4">JO</span><span class="avatar a5">+</span>
+            </div>
+            <div>
+              <div class="stars" aria-label="4.9 out of 5 stars">
+                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>
+              </div>
+              <p class="trust-copy"><strong>4.9/5</strong> from 2,300+ reviews<br />Trusted by <strong>12,000+ farms</strong> in 40 countries</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hero product visual -->
+        <div class="hero-visual" aria-hidden="true">
+          <div class="dash-card main-card">
+            <div class="dash-topbar">
+              <span class="dot d-red"></span><span class="dot d-amber"></span><span class="dot d-green"></span>
+              <span class="dash-title">AgroIntel · GreenHarvest North Farm</span>
+              <span class="dash-badge">Sentinel-2 · Oct 2026</span>
+            </div>
+            <div class="dash-body">
+              <svg class="field-map" viewBox="0 0 340 232" role="img" aria-label="Satellite NDVI map of five crop blocks">
+                <defs>
+                  <linearGradient id="f1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#58a05e"/><stop offset="1" stop-color="#3c7a45"/></linearGradient>
+                  <linearGradient id="f2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f8a52"/><stop offset="1" stop-color="#2c5f3a"/></linearGradient>
+                  <linearGradient id="f3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c4c468"/><stop offset="1" stop-color="#a3ad4e"/></linearGradient>
+                  <linearGradient id="f4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f9e8f"/><stop offset="1" stop-color="#35705f"/></linearGradient>
+                  <pattern id="rowsW" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M2 0V10" stroke="#ffffff" stroke-opacity="0.28" stroke-width="2"/></pattern>
+                  <pattern id="hatchT" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 0H9" stroke="#ffffff" stroke-opacity="0.22" stroke-width="2"/></pattern>
+                  <pattern id="dotsC" width="11" height="11" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.6" fill="#ffffff" fill-opacity="0.3"/></pattern>
+                  <pattern id="crossG" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M0 6H12M6 0V12" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.4"/></pattern>
+                  <pattern id="waveP" width="14" height="8" patternUnits="userSpaceOnUse"><path d="M0 4Q3.5 0 7 4T14 4" fill="none" stroke="#ffffff" stroke-opacity="0.3" stroke-width="1.5"/></pattern>
+                </defs>
+                <rect x="0" y="0" width="340" height="232" rx="12" fill="#e6ecda"/>
+                <path d="M150 0C158 60 128 96 146 150C156 186 176 206 172 232" stroke="#aecfe4" stroke-width="11" fill="none" stroke-linecap="round"/>
+                <path d="M150 0C158 60 128 96 146 150C156 186 176 206 172 232" stroke="#dcebf5" stroke-width="3" fill="none" stroke-linecap="round"/>
+                <path d="M0 96H340" stroke="#d9cfae" stroke-width="7"/>
+                <path d="M0 96H340" stroke="#ffffff" stroke-width="1.6" stroke-dasharray="8 8"/>
+                <path d="M10 12h132l10 74-14 34H10z" fill="url(#f1)"/><path d="M10 12h132l10 74-14 34H10z" fill="url(#rowsW)"/>
+                <path d="M10 132h126l10 96H10z" fill="url(#f2)"/><path d="M10 132h126l10 96H10z" fill="url(#hatchT)"/>
+                <path d="M162 12h168v86l-58 14-146-12z" fill="url(#f3)"/><path d="M162 12h168v86l-58 14-146-12z" fill="url(#dotsC)"/>
+                <path d="M160 124h170v44l-78 12-104-8z" fill="#4e9a4c"/><path d="M160 124h170v44l-78 12-104-8z" fill="url(#crossG)"/>
+                <path d="M160 192h170v28H156z" fill="url(#f4)"/><path d="M160 192h170v28H156z" fill="url(#waveP)"/>
+                <g font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#ffffff">
+                  <rect x="18" y="18" rx="4" width="66" height="14" fill="#14352a" fill-opacity="0.55"/><text x="24" y="28.5">B · WHEAT</text>
+                  <rect x="18" y="138" rx="4" width="70" height="14" fill="#14352a" fill-opacity="0.55"/><text x="24" y="148.5">A · TOMATO</text>
+                  <rect x="238" y="18" rx="4" width="68" height="14" fill="#14352a" fill-opacity="0.55"/><text x="244" y="28.5">C · COTTON</text>
+                  <rect x="238" y="128" rx="4" width="64" height="14" fill="#14352a" fill-opacity="0.55"/><text x="244" y="138.5">D · GRAPES</text>
+                  <rect x="238" y="198" rx="4" width="58" height="13" fill="#14352a" fill-opacity="0.55"/><text x="244" y="208">E · PADDY</text>
+                </g>
+                <g class="pin"><circle cx="96" cy="180" r="8" fill="#fee2e2"/><circle cx="96" cy="180" r="4" fill="#dc2626"/></g>
+              </svg>
+              <div class="diag-panel">
+                <div class="diag-label">Crop health · live</div>
+                <ul class="crop-health">
+                  <li class="ch-row alert"><span class="ch-dot"></span><span class="ch-name">Tomato · A</span><span class="ch-val">0.62</span></li>
+                  <li class="ch-row watch"><span class="ch-dot"></span><span class="ch-name">Cotton · C</span><span class="ch-val">0.66</span></li>
+                  <li class="ch-row ok"><span class="ch-dot"></span><span class="ch-name">Wheat · B</span><span class="ch-val">0.78</span></li>
+                  <li class="ch-row ok"><span class="ch-dot"></span><span class="ch-name">Paddy · E</span><span class="ch-val">0.81</span></li>
+                  <li class="ch-row ok"><span class="ch-dot"></span><span class="ch-name">Grapes · D</span><span class="ch-val">0.83</span></li>
+                </ul>
+                <div class="diag-rec"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22zm0 6 7.5 13h-15zm-1 4v5h2v-5zm0 7v2h2v-2z"/></svg> Early blight on Block A — chlorothalonil Thursday 6–9 AM</div>
+              </div>
+            </div>
+            <div class="dash-foot">
+              <div class="foot-metric"><span>Water saved</span><strong>31%</strong></div>
+              <div class="foot-metric"><span>Yield forecast</span><strong>+12.4%</strong></div>
+              <div class="foot-metric"><span>Spray window</span><strong>Thu 6–9 AM</strong></div>
+            </div>
+          </div>
+
+          <!-- Floating cards -->
+          <div class="float-card fc-1">
+            <span class="fc-icon fc-blue"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2S6 10.2 6 15a6 6 0 0 0 12 0c0-4.8-6-13-6-13z"/></svg></span>
+            <div><strong>Irrigation in 2h</strong><small>Block B · 18 mm deficit</small></div>
+          </div>
+          <div class="float-card fc-2">
+            <span class="fc-icon fc-amber"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22zm0 6 7.5 13h-15zm-1 4v5h2v-5zm0 7v2h2v-2z"/></svg></span>
+            <div><strong>Aphid risk: moderate</strong><small>Scout rows 4–9 this week</small></div>
+          </div>
+          <div class="float-card fc-3">
+            <span class="fc-icon fc-green"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 13h4v8H3zm7-6h4v14h-4zm7-4h4v18h-4z"/></svg></span>
+            <div><strong>Vigour +12% WoW</strong><small>NDVI trend, Blocks A–D</small></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ LIVE FIELD-PINGS TICKER ============ -->
+    <div class="ticker" aria-label="Live field pings from the sample farm">
+      <div class="ticker-inner">
+        <span class="ticker-label"><span class="ticker-pulse" aria-hidden="true"></span>Field pings</span>
+        <div class="ticker-viewport">
+          <div class="ticker-track">
+            <span class="ticker-item"><b>Block A · Tomato</b> early blight 94% · spray Thu 6–9 AM</span>
+            <span class="ticker-item"><b>Block B · Wheat</b> NDVI 0.78 · vigorous tillering</span>
+            <span class="ticker-item"><b>Block C · Cotton</b> aphid risk 82% · scout rows 4–9</span>
+            <span class="ticker-item"><b>Block D · Grapes</b> Sep moisture dip · irrigate 18 mm</span>
+            <span class="ticker-item"><b>Block E · Paddy</b> panicle initiation · 4 cm standing water</span>
+            <span class="ticker-item"><b>NASA POWER</b> 608 of 731 days in root-zone comfort</span>
+            <span class="ticker-item"><b>MODIS</b> NDVI 8-Day composite · Wed pass</span>
+            <span class="ticker-item" aria-hidden="true"><b>Block A · Tomato</b> early blight 94% · spray Thu 6–9 AM</span>
+            <span class="ticker-item" aria-hidden="true"><b>Block B · Wheat</b> NDVI 0.78 · vigorous tillering</span>
+            <span class="ticker-item" aria-hidden="true"><b>Block C · Cotton</b> aphid risk 82% · scout rows 4–9</span>
+            <span class="ticker-item" aria-hidden="true"><b>Block D · Grapes</b> Sep moisture dip · irrigate 18 mm</span>
+            <span class="ticker-item" aria-hidden="true"><b>Block E · Paddy</b> panicle initiation · 4 cm standing water</span>
+            <span class="ticker-item" aria-hidden="true"><b>NASA POWER</b> 608 of 731 days in root-zone comfort</span>
+            <span class="ticker-item" aria-hidden="true"><b>MODIS</b> NDVI 8-Day composite · Wed pass</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ LOGO STRIP ============ -->
+    <section class="logo-strip" aria-label="Trusted by leading growers and co-ops">
+      <div class="container">
+        <p class="strip-label">Powering fields at</p>
+        <div class="strip-row">
+          <span class="wordmark">GreenHarvest&nbsp;Co-op</span>
+          <span class="wordmark">TerraGrow</span>
+          <span class="wordmark">AgriNova</span>
+          <span class="wordmark">Prairie&nbsp;Seeds</span>
+          <span class="wordmark">FarmLink</span>
+          <span class="wordmark">Delta&nbsp;Irrigation</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ STATS ============ -->
+    <section class="stats">
+      <div class="container stats-grid">
+        <div class="stat"><strong data-count="731" data-suffix="">0</strong><span>days of NASA POWER loaded live, 2023–2024</span></div>
+        <div class="stat"><strong data-count="250" data-suffix=" m">0</strong><span>MODIS pixel resolution — true color &amp; NDVI 8-Day</span></div>
+        <div class="stat"><strong data-count="4" data-suffix="">0</strong><span>NASA layers on tap — free, no API keys</span></div>
+        <div class="stat"><strong data-count="5" data-suffix="">0</strong><span>crop blocks tracked with live NDVI triage</span></div>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Platform</span>
+          <h2 class="section-title">One field brain, <em>every</em> decision.</h2>
+          <p class="section-sub">Every feature below runs on open NASA data or live Gemini AI — not mockups. From orbit to row, wired end-to-end.</p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="f-icon fi-teal"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="m12 2 9 5-9 5-9-5zm0 7.2 6.4 3.6L12 16.4l-6.4-3.6zM3 13.2l9 5 9-5v3l-9 5-9-5z"/></svg></span>
+            <h3>NASA live satellite maps</h3>
+            <p>Real <strong>MODIS Terra/Aqua</strong> imagery, <strong>NDVI 8-Day</strong> and <strong>land surface temperature</strong> — dated, opacity-tunable, layered over sub-meter Esri imagery. Click any block for field intel.</p>
+            <span class="f-tag">NASA GIBS · MODIS</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="f-icon fi-lime"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><linearGradient id="gemI" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4285f4"/><stop offset="0.5" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><path fill="url(#gemI)" d="M12 2c.8 5.6 4.4 9.2 10 10-5.6.8-9.2 4.4-10 10-.8-5.6-4.4-9.2-10-10 5.6-.8 9.2-4.4 10-10z"/></svg></span>
+            <h3>Ask Agro — real AI, 24/7</h3>
+            <p>Google’s Gemini as your agronomist — grounded in your farm’s <strong>NASA POWER</strong> climate record and MODIS NDVI passes. Ask anything; it answers with your numbers, not canned scripts.</p>
+            <span class="f-tag">Gemini · Grounded in NASA data</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="f-icon fi-green"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3 5h8v2H8zm0 4h8v2H8zm0 4h5v2H8z"/></svg></span>
+            <h3>NDVI crop health</h3>
+            <p>Per-block NDVI for wheat, tomato, cotton, grapes and paddy — stressed canopy flagged days before the eye sees it, pinned to your block map and to Ask Agro’s answers.</p>
+            <span class="f-tag">Block-level NDVI</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="f-icon fi-blue"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 2S6 10.2 6 15a6 6 0 0 0 12 0c0-4.8-6-13-6-13z"/></svg></span>
+            <h3>Irrigation intelligence</h3>
+            <p><strong>GWETROOT</strong> root-zone wetness straight from NASA POWER — 731 days charted per farm. Agro tells you the exact week to irrigate; most growers cut water use by 30%.</p>
+            <span class="f-tag">GWETROOT-driven</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="f-icon fi-amber"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M17 8a5 5 0 0 0-10 0c0 4-2 5.5-2 8h14c0-2.5-2-4-2-8zM8.5 18a3.5 3.5 0 0 0 7 0z"/></svg></span>
+            <h3>Climate &amp; soil moisture</h3>
+            <p>Rainfall, heat extremes and root-zone wetness for your exact field — <strong>731 days</strong> rendered as plain-language charts with next-season advice, straight from NASA POWER.</p>
+            <span class="f-tag">NASA POWER · 2023–24</span>
+          </article>
+
+          <article class="feature-card">
+            <span class="f-icon fi-violet"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M12 2C8 2 5 5 5 9c0 2 1 3.5 2 5l-3 6h16l-3-6c1-1.5 2-3 2-5 0-4-3-7-7-7zm-2 20h4v-2h-4z"/></svg></span>
+            <h3>Crop library &amp; triage</h3>
+            <p>12 field crops tracked with live NDVI and triage status — cereals, vegetables, cash crops, fruits. Filter by group; every tile is wired to the map and to Ask Agro.</p>
+            <span class="f-tag">120+ crops</span>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HOW IT WORKS ============ -->
+    <section class="section section-tinted" id="how">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">How it works</span>
+          <h2 class="section-title">From worry to <em>action plan</em> in 3 steps.</h2>
+        </div>
+        <ol class="steps">
+          <li class="step">
+            <span class="step-num">01</span>
+            <h3>Scout the map</h3>
+            <p>Open <strong>NASA Live</strong>, pick a layer and a date — True Color, NDVI 8-Day, land surface temperature — and click any block to see its story.</p>
+            <div class="step-chip">Block A · Tomato · NDVI 0.62 · blight alert</div>
+          </li>
+          <li class="step">
+            <span class="step-num">02</span>
+            <h3>Ask Agro</h3>
+            <p>The Gemini-powered agronomist answers with your <strong>NASA POWER</strong> record and the MODIS pass woven in — dosages, windows, severity.</p>
+            <div class="step-chip">“Chlorothalonil 2.0 L/ha, Thursday 6–9 AM”</div>
+          </li>
+          <li class="step">
+            <span class="step-num">03</span>
+            <h3>Act &amp; track</h3>
+            <p>Spray inside the window, irrigate on <strong>GWETROOT</strong> signals, and watch NDVI respond block-by-block on the next pass.</p>
+            <div class="step-chip">NDVI 0.62 → 0.71 in 18 days</div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============ NASA LIVE ANALYSIS ============ -->
+    <section class="section section-tinted" id="analysis">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">NASA live data</span>
+          <h2 class="section-title">Real satellites. <em>Real fields.</em></h2>
+          <p class="section-sub">Explore satellite views, field-level vulnerability zones and “what-if” climate scenarios for our sample farm. Click any block for details. Use the controls to see how conditions change.</p>
+        </div>
+
+        <div class="tip-bar" role="note">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8zm1 5h-2v6h6v-2h-4z"/></svg>
+          <p><strong>Tip:</strong> MODIS is 250 m per pixel — so the NASA layer <em>fades automatically as you zoom in</em>, revealing the high-resolution satellite beneath. Start with <strong>True Color</strong> or <strong>NDVI</strong>, then try the suitability overlay.</p>
+        </div>
+
+        <!-- Control bar -->
+        <div class="map-toolbar" aria-label="Map controls">
+          <div class="toolbar-field">
+            <label for="baseMapSelect">Base map</label>
+            <select id="baseMapSelect">
+              <option value="satellite" selected>Satellite (Esri)</option>
+              <option value="streets">Streets (OpenStreetMap)</option>
+            </select>
+          </div>
+          <div class="toolbar-field">
+            <label for="nasaLayerSelect">NASA layer</label>
+            <select id="nasaLayerSelect">
+              <option value="MODIS_Terra_CorrectedReflectance_TrueColor" data-format="image/jpeg" selected>MODIS Terra True Color</option>
+              <option value="MODIS_Aqua_CorrectedReflectance_TrueColor" data-format="image/jpeg">MODIS Aqua True Color</option>
+              <option value="MODIS_Terra_NDVI_8Day" data-format="image/png">MODIS Terra NDVI 8-Day</option>
+              <option value="MODIS_Terra_Land_Surface_Temp_Day" data-format="image/png">MODIS Terra Land Surface Temp</option>
+            </select>
+          </div>
+          <div class="toolbar-field">
+            <label for="nasaDate">Date</label>
+            <input type="date" id="nasaDate" value="2025-07-15" min="2000-02-24" max="2026-11-04" />
+          </div>
+          <div class="toolbar-field toolbar-scrub">
+            <label for="seasonScrub">Scrub season <output id="seasonScrubValue" for="seasonScrub">Jul</output></label>
+            <input type="range" id="seasonScrub" min="1" max="12" value="7" step="1" />
+            <span class="toolbar-hint">Drag to see bare-field &amp; stress conditions change through the year</span>
+          </div>
+          <div class="toolbar-field toolbar-opacity">
+            <label for="layerOpacity">Opacity <output id="opacityValue" for="layerOpacity">85%</output></label>
+            <input type="range" id="layerOpacity" min="0" max="100" value="85" />
+            <span class="toolbar-hint">Auto-fades as you zoom in</span>
+          </div>
+          <label class="toolbar-check" for="layerLabels">
+            <input type="checkbox" id="layerLabels" checked />
+            <span>Place labels</span>
+          </label>
+          <button class="btn btn-center" id="centerFarmBtn" type="button">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8zm0 4a6 6 0 1 0 6 6h-2a4 4 0 1 1-4-4zm0 4a2 2 0 1 0 2 2h-2a0 0 0 0 1 0 0z"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+            Center farm
+          </button>
+          <form class="toolbar-search" id="placeSearchForm" role="search">
+            <label for="placeSearch">Search place</label>
+            <div class="search-row">
+              <input type="text" id="placeSearch" placeholder="City, farm, country…" autocomplete="off" />
+              <button type="submit" class="btn btn-search">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M10 2a8 8 0 1 1 4.9 14.3l5.4 5.4-1.4 1.4-5.4-5.4A8 8 0 0 1 10 2zm0 2a6 6 0 1 0 6 6 6 6 0 0 0-6-6z"/></svg>
+                Go
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Map + suitability panel -->
+        <div class="analysis-grid">
+          <div class="map-card">
+            <div id="nasaMap" role="application" aria-label="Interactive NASA satellite map of the sample farm — click the green field markers for details"></div>
+            <div class="map-attrib">Imagery © Esri, Maxar, Earthstar Geographics · Place labels © Esri · NASA GIBS (MODIS Terra / Aqua) · NASA POWER · <a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA Worldview</a></div>
+          </div>
+
+          <aside class="suitability-panel" aria-label="Suitability model">
+            <h3><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 2 2 8l10 6 10-6zm-8.5 8.3L2 11.5l10 6 10-6-1.5-1.2L12 14.7zM2 15l1.5-1L12 20l8.5-6 1.5 1-10 6z"/></svg> Suitability Model</h3>
+            <p>Risk zones positioned at each block's real location, computed from the real NASA POWER heat &amp; root-zone-wetness record for this time of year, combined with each crop's documented growth-calendar and sensitivity (bare-field / establishing / growing / peak / senescence) — not a per-pixel satellite measurement.</p>
+
+            <label class="check-row" for="suitabilityToggle">
+              <input type="checkbox" id="suitabilityToggle" checked />
+              <span>Show suitability heatmap</span>
+            </label>
+
+            <label class="field-label" for="modelSelect">Map model</label>
+            <select id="modelSelect">
+              <option value="erosion" selected>Erosion Risk</option>
+              <option value="drought">Drought / Water Stress</option>
+              <option value="nitrogen">Nitrogen Loss</option>
+              <option value="flood">Flood Risk</option>
+              <option value="stress">Crop Stress &amp; Season</option>
+            </select>
+
+            <p class="model-note" id="modelNote">Loading real NASA POWER data…</p>
+            <div class="model-legend" id="modelLegend" aria-hidden="true">
+              <span class="legend-label">Low</span>
+              <span class="legend-bar" id="legendBar"></span>
+              <span class="legend-label">High</span>
+            </div>
+
+            <ul class="field-intel" id="fieldIntel" aria-label="Per-block risk under the selected model, with the real/assumed basis on hover"></ul>
+
+            <details class="scenario-box">
+              <summary>What-if scenario (hypothetical, not a forecast)</summary>
+              <div class="scenario-row">
+                <label for="scenarioRain">Rainfall <output id="scenarioRainValue" for="scenarioRain">+0%</output></label>
+                <input type="range" id="scenarioRain" min="-50" max="50" value="0" step="5" />
+              </div>
+              <div class="scenario-row">
+                <label for="scenarioTemp">Temperature <output id="scenarioTempValue" for="scenarioTemp">+0.0°C</output></label>
+                <input type="range" id="scenarioTemp" min="-5" max="5" value="0" step="0.5" />
+              </div>
+              <button type="button" class="btn-reset-scenario" id="resetScenario">Reset to real baseline</button>
+            </details>
+          </aside>
+        </div>
+
+        <!-- Climate & soil moisture -->
+        <div class="climate-block">
+          <div class="climate-head">
+            <svg class="climate-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M14 34a8 8 0 0 1 .8-16 11 11 0 0 1 21.5 3.2A7.5 7.5 0 0 1 35 34z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/><path d="M16 40l2.5-4M24 41l2.5-4M32 40l2.5-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="36" cy="10" r="5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M36 1v4M43 10h4M41.5 3.5l2.8-2.8M41.5 16.5l2.8 2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <div>
+              <h3>Climate &amp; Soil Moisture Patterns</h3>
+              <p>Temperature and rainfall for the sample farm, pulled live from free NASA POWER data (2023–2024). Notes below explain what the patterns mean for soil and crops — in everyday language.</p>
+            </div>
+          </div>
+
+          <div class="climate-actions">
+            <button class="btn btn-orange btn-lg" id="loadPowerBtn" type="button">
+              <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M11 2h2v10.2l3.6-3.6 1.4 1.4-6 6-6-6 1.4-1.4 3.6 3.6zM4 18h16v3H4z"/></svg>
+              <span class="btn-label">Load NASA POWER data (2023–2024)</span>
+            </button>
+            <p class="power-status" id="powerStatus" aria-live="polite">Not loaded yet — one click, ~2 seconds.</p>
+          </div>
+
+          <div class="charts-grid">
+            <figure class="chart-card">
+              <figcaption>Monthly precipitation <span>mm · NASA POWER PRECTOTCORR</span></figcaption>
+              <div class="chart-wrap" id="precipChart" role="img" aria-label="Bar chart of monthly precipitation, 2023 to 2024"><div class="chart-empty">Press “Load NASA POWER data” to render the chart.</div></div>
+            </figure>
+            <figure class="chart-card">
+              <figcaption>Temperature <span>°C · max / mean / min · T2M_MAX / T2M / T2M_MIN</span></figcaption>
+              <div class="chart-wrap" id="tempChart" role="img" aria-label="Line chart of monthly maximum, mean and minimum temperature, 2023 to 2024"><div class="chart-empty">Press “Load NASA POWER data” to render the chart.</div></div>
+            </figure>
+          </div>
+
+          <div class="takeaway-grid">
+            <div class="takeaway-card">
+              <span class="tk-icon tk-blue"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12 2S6 10.2 6 15a6 6 0 0 0 12 0c0-4.8-6-13-6-13z"/></svg></span>
+              <h4>Soil Moisture Windows</h4>
+              <p id="takeawayMoisture">Root-zone wetness windows (NASA POWER GWETROOT) will appear here after loading — the best days to sow, irrigate or spray.</p>
+            </div>
+            <div class="takeaway-card">
+              <span class="tk-icon tk-amber"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M14 14.8V5a2 2 0 0 0-4 0v9.8a4 4 0 1 0 4 0z"/><circle cx="12" cy="17" r="1.4" fill="#fff"/></svg></span>
+              <h4>Heat &amp; Vegetation Stress</h4>
+              <p id="takeawayHeat">Days above 32 °C and the season peak will appear here — the threshold where pollination and young fruit start to fail.</p>
+            </div>
+            <div class="takeaway-card">
+              <span class="tk-icon tk-teal"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M2 9c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2v3c-2.5 0-2.5 2-5 2s-2.5-2-5-2-2.5 2-5 2-2.5-2-5-2zM2 14c2.5 0 2.5 2 5 2s2.5-2 5-2 2.5 2 5 2 2.5-2 5-2v3c-2.5 0-2.5 2-5 2s-2.5-2-5-2-2.5 2-5 2-2.5-2-5-2z"/></svg></span>
+              <h4>Long-term Water Trends</h4>
+              <p id="takeawayWater">Year-over-year rainfall delta for 2023 vs 2024 will appear here — the case for (or against) changing your rotation.</p>
+            </div>
+          </div>
+          <p class="data-credit">Data: <a href="https://power.larc.nasa.gov/" target="_blank" rel="noopener">NASA POWER</a> (Agroclimatology, daily) · <a href="https://gibs.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA GIBS</a> (MODIS) · <a href="https://worldview.earthdata.nasa.gov/" target="_blank" rel="noopener">NASA Worldview</a> · Esri World Imagery. Open NASA datasets — no API keys required.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ ASK AGRO — GEMINI, GROUNDED IN NASA DATA ============ -->
+    <section class="section" id="ask">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Ask Agro · Gemini AI</span>
+          <h2 class="section-title">Not a scripted bot. <em>Your</em> agronomist<br class="br-lg" />on the other end.</h2>
+          <p class="section-sub">Ask Agro is a real large-language-model agronomist — Google’s Gemini, grounded in <strong>your farm’s live NASA POWER climate data and MODIS NDVI passes</strong> from the map above. It answers with your numbers, not canned replies.</p>
+        </div>
+
+        <div class="ask-grid">
+          <!-- LEFT: what Agro knows — live context readout -->
+          <aside class="context-card" aria-label="What Ask Agro knows">
+            <div class="context-head">
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 10 10h-2a8 8 0 1 1-8-8zm1 5h-2v6h6v-2h-4z"/></svg>
+              <h3>What Agro knows, <em>right now</em></h3>
+            </div>
+            <ul class="context-list">
+              <li><span class="ctx-label">Farm</span><span class="ctx-value">GreenHarvest North · 214 ha · 5 blocks<br /><small>Central Iowa — 42.02°N, 93.55°W</small></span></li>
+              <li><span class="ctx-label">Blocks</span><span class="ctx-value"><small>A Tomato 0.62 (blight alert) · B Wheat 0.78 · C Cotton 0.66 · D Grapes 0.83 · E Paddy 0.81</small></span></li>
+              <li><span class="ctx-label">NASA POWER</span><span class="ctx-value"><span class="ctx-live" id="ctxPowerStatus"><span class="ctx-dot wait"></span>loading…</span><br /><small id="ctxPowerDetail">731 daily records · 2023–2024 · Agroclimatology (AG)</small></span></li>
+              <li><span class="ctx-label">MODIS layer</span><span class="ctx-value" id="ctxLayer">MODIS Terra True Color · 2025-07-15</span></li>
+              <li><span class="ctx-label">Spray window</span><span class="ctx-value">Thu 6–9 AM · wind &lt; 8 km/h · 6 h rain-free</span></li>
+            </ul>
+
+            <div class="connect-box" id="connectBox">
+              <div class="connect-title-row">
+                <span class="ctx-dot" id="geminiDot"></span>
+                <h4 id="connectTitle">Connect Gemini to go live</h4>
+              </div>
+              <p id="connectHint">Paste your Google AI Studio API key — it stays in this browser and is sent only to Google’s API. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="inline-link">Get a free key →</a></p>
+              <form class="connect-form" id="connectForm" autocomplete="off">
+                <label class="sr-only" for="geminiKey">Gemini API key</label>
+                <input type="password" id="geminiKey" placeholder="AIza…" autocomplete="off" spellcheck="false" />
+                <button type="button" class="key-toggle" id="keyToggle" aria-label="Show or hide key" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 5c5.3 0 9.6 4.6 11 7-1.4 2.4-5.7 7-11 7S2.4 14.4 1 12c1.4-2.4 5.7-7 11-7zm0 2c-4 0-7.7 3.6-8.9 5 1.2 1.4 4.9 5 8.9 5s7.7-3.6 8.9-5c-1.2-1.4-4.9-5-8.9-5zm0 2.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg>
+                </button>
+                <button type="submit" class="btn btn-primary" id="connectBtn">Connect</button>
+              </form>
+              <label class="model-pick" for="geminiModel">Model
+                <select id="geminiModel">
+                  <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash — fast</option>
+                  <option value="gemini-2.5-pro">Gemini 2.5 Pro — deepest reasoning</option>
+                </select>
+              </label>
+              <button type="button" class="disconnect" id="disconnectBtn" hidden>Disconnect this browser</button>
+              <p class="connect-note">Key is stored in <code>localStorage</code> only. Static sites can’t hide keys — for production, proxy through your backend.</p>
+            </div>
+          </aside>
+
+          <!-- RIGHT: the chat -->
+          <div class="ask-chat" aria-label="Ask Agro chat">
+            <div class="chat-header ask-chat-header">
+              <div class="chat-id">
+                <span class="chat-avatar">
+                  <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><defs><linearGradient id="gem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4285f4"/><stop offset="0.5" stop-color="#9b72cb"/><stop offset="1" stop-color="#d96570"/></linearGradient></defs><rect width="32" height="32" rx="9" fill="url(#gem)"/><path d="M23 9 12.5 20.5M23 9l-4.5 14L12.5 20.5z" fill="#fff" fill-opacity="0.92"/></svg>
+                </span>
+                <div>
+                  <div class="chat-name">Ask Agro <span class="model-badge" id="modelBadge">Gemini 2.5 Flash</span></div>
+                  <div class="chat-status"><span class="status-dot" id="geminiStatusDot"></span> <span id="geminiStatusText">Offline — connect your key</span></div>
+                </div>
+              </div>
+              <button class="clear-chat" id="askClearBtn" type="button" aria-label="Clear conversation">
+                <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2h-1.1l-1.2 14a2 2 0 0 1-2 1.9H8.3a2 2 0 0 1-2-1.9L5.1 7H4V5h4zm-1.2 4 1.1 13h6.2l1.1-13z"/></svg>
+              </button>
+            </div>
+
+            <div class="chat-messages ask-messages" id="askMessages" aria-live="polite"></div>
+
+            <div class="chat-locked" id="chatLocked">
+              <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="currentColor" d="M17 8h-1V6a4 4 0 0 0-8 0v2H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2zm-6-2a2 2 0 0 1 4 0v2h-4zm.9 11.5v1a1.1 1.1 0 0 1-2.2 0v-1a2.4 2.4 0 1 1 2.2 0z"/></svg>
+              <h4>Connect Gemini to unlock</h4>
+              <p>Paste your Google AI Studio key on the left — Ask Agro then answers with your NASA POWER + MODIS data woven in.</p>
+            </div>
+
+            <div class="chat-suggestions" id="askSuggestions" aria-label="Suggested questions">
+              <button class="chip" data-question="Should I irrigate Block C this week? Use our NASA POWER data.">Irrigate Block C?</button>
+              <button class="chip" data-question="Why did soil moisture dip in September, and what should I change for next season?">Sep moisture dip</button>
+              <button class="chip" data-question="Build me a nitrogen split plan for Block B wheat, based on current conditions.">N plan for wheat</button>
+              <button class="chip" data-question="Draft a Thursday spray window for early blight on Block A tomato — include rates and PPE.">Spray plan, Block A</button>
+            </div>
+
+            <form class="chat-input-area" id="askForm" autocomplete="off">
+              <label class="sr-only" for="askInput">Ask Agro a question</label>
+              <input type="text" id="askInput" placeholder="Ask about your farm — moisture, sprays, N, disease…" maxlength="500" disabled />
+              <button type="submit" id="askSendBtn" class="send-btn" aria-label="Send message" disabled>
+                <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path fill="currentColor" d="M3 20.5 22 12 3 3.5v6.6L15 12 3 13.9z"/></svg>
+              </button>
+            </form>
+            <p class="ask-disclaimer">Answers use NASA POWER (42.02°N, 93.55°W · 2023–2024) + MODIS NDVI via GIBS · Not a substitute for professional agronomy advice.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CROP LIBRARY ============ -->
+    <section class="section" id="crops">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Crop library</span>
+          <h2 class="section-title">Every crop, <em>one</em> field brain.</h2>
+          <p class="section-sub">120+ crops tracked across our network. Filter by group — NDVI and alerts update weekly from Sentinel-2.</p>
+          <div class="crop-filters" role="group" aria-label="Filter crops">
+            <button class="crop-filter active" data-filter="all">All 12</button>
+            <button class="crop-filter" data-filter="cereals">Cereals</button>
+            <button class="crop-filter" data-filter="vegetables">Vegetables</button>
+            <button class="crop-filter" data-filter="cash">Cash crops</button>
+            <button class="crop-filter" data-filter="fruits">Fruits</button>
+          </div>
+        </div>
+
+        <div class="crop-grid" id="cropGrid">
+          <article class="crop-tile" data-cat="cereals">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4v40M24 14c-5 0-8-3.5-8.5-8C21 6 24 9 24 14Zm0 0c5 0 8-3.5 8.5-8C27 6 24 9 24 14Zm0 10c-5 0-8-3.5-8.5-8 5.5 0 8.5 3 8.5 8Zm0 0c5 0 8-3.5 8.5-8-5.5 0-8.5 3-8.5 8Zm0 10c-5 0-8-3.5-8.5-8 5.5 0 8.5 3 8.5 8Zm0 0c5 0 8-3.5 8.5-8-5.5 0-8.5 3-8.5 8Zm0 10c-5 0-8-3.5-8.5-8 5.5 0 8.5 3 8.5 8Zm0 0c5 0 8-3.5 8.5-8-5.5 0-8.5 3-8.5 8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            <h3>Wheat</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.78</span><span class="state ok">Healthy</span></p>
+          </article>
+          <article class="crop-tile" data-cat="cereals">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M6 34q6-6 12 0t12 0 12 0M6 22q6-6 12 0t12 0 12 0M14 34c0-10 4-18 10-24M34 34c0-10-4-18-10-24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Paddy</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.81</span><span class="state ok">Healthy</span></p>
+          </article>
+          <article class="crop-tile" data-cat="cereals">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="15" y="6" width="18" height="36" rx="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 6v36M19.5 14h9M18 20h12M18 26h12M19.5 32h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Maize</h3><p class="crop-meta"><span class="ndvi watch">NDVI 0.69</span><span class="state watch">Watch</span></p>
+          </article>
+          <article class="crop-tile" data-cat="vegetables">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="27" r="14" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 13l-4-6M24 13l4-6M24 13l0-7M24 13c-3 0-6 1-8 3M24 13c3 0 6 1 8 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Tomato</h3><p class="crop-meta"><span class="ndvi alert">NDVI 0.62</span><span class="state alert">Blight alert</span></p>
+          </article>
+          <article class="crop-tile" data-cat="vegetables">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M12 8c6 4 18 16 22 30 1.5 5-4 8-8 5C16 34 10 18 12 8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M14 8c2-3 6-4 9-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Chilli</h3><p class="crop-meta"><span class="ndvi watch">NDVI 0.71</span><span class="state watch">Watch</span></p>
+          </article>
+          <article class="crop-tile" data-cat="vegetables">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 14c9 0 14 6 14 13a14 13 0 0 1-28 0c0-7 5-13 14-13Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M18 30c2 3 4.5 4.5 6 4.5s4-1.5 6-4.5M24 14c0-4 1.5-7 4-9M24 14c-1-3-3-5-6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Onion</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.76</span><span class="state ok">Healthy</span></p>
+          </article>
+          <article class="crop-tile" data-cat="vegetables">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><ellipse cx="24" cy="26" rx="16" ry="11" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="24" r="1.4" fill="currentColor"/><circle cx="29" cy="29" r="1.4" fill="currentColor"/><circle cx="25" cy="21" r="1.2" fill="currentColor"/></svg>
+            <h3>Potato</h3><p class="crop-meta"><span class="ndvi alert">NDVI 0.58</span><span class="state alert">Late blight risk</span></p>
+          </article>
+          <article class="crop-tile" data-cat="cash">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="17" cy="22" r="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="30" cy="17" r="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="23" cy="31" r="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M24 37c0 4-1 6-3 8M24 37c1-4 3-6 6-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Cotton</h3><p class="crop-meta"><span class="ndvi watch">NDVI 0.66</span><span class="state watch">Aphid risk</span></p>
+          </article>
+          <article class="crop-tile" data-cat="cash">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M15 44V10M24 44V6M33 44V12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M11 18h8M11 26h8M20 14h8M20 22h8M20 30h8M29 20h8M29 28h8M29 36h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Sugarcane</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.79</span><span class="state ok">Healthy</span></p>
+          </article>
+          <article class="crop-tile" data-cat="cash">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 30c8-10 24-10 32 0-8 6-24 6-32 0Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="18" cy="29" r="2.1" fill="currentColor"/><circle cx="25" cy="28" r="2.1" fill="currentColor"/><circle cx="32" cy="29" r="2.1" fill="currentColor"/></svg>
+            <h3>Soybean</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.72</span><span class="state ok">Healthy</span></p>
+          </article>
+          <article class="crop-tile" data-cat="fruits">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><circle cx="19" cy="19" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="29" cy="17" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="14" cy="29" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="24" cy="27" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="33" cy="27" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="19" cy="38" r="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="29" cy="37" r="5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M25 12c1-4 4-6 8-7-1 4-3 6-8 7Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+            <h3>Grapes</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.83</span><span class="state ok">Veraison</span></p>
+          </article>
+          <article class="crop-tile" data-cat="fruits">
+            <svg class="crop-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M30 6c8 2 12 10 8 19s-14 15-20 10S10 22 16 12c4-6 9-7 14-6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M30 6c1-2 3-3 6-3-.5 3-2 5-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            <h3>Mango</h3><p class="crop-meta"><span class="ndvi ok">NDVI 0.77</span><span class="state ok">Healthy</span></p>
+          </article>
+        </div>
+        <p class="crop-foot">Don’t see your crop? <a class="inline-link" href="mailto:crops@agrointel.ag?subject=Request%20a%20crop%20model">Request it</a> — we ship a new crop model every month.</p>
+      </div>
+    </section>
+
+    <!-- ============ TESTIMONIALS ============ -->
+    <section class="section section-tinted" id="stories">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Field stories</span>
+          <h2 class="section-title">Growers who stopped <em>guessing</em>.</h2>
+        </div>
+        <div class="quote-grid">
+          <figure class="quote-card">
+            <div class="stars small"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></div>
+            <blockquote>“AgroIntel caught early blight two weeks before my scout did. We saved the whole tomato block — that’s ₹18 lakh of fruit that would’ve rotted.”</blockquote>
+            <figcaption><span class="avatar a2">MK</span><span><strong>Meera Kulkarni</strong><small>Grape &amp; tomato, Nashik · 42 acres</small></span></figcaption>
+          </figure>
+
+          <figure class="quote-card">
+            <div class="stars small"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></div>
+            <blockquote>“Ask Agro answers at 2 AM when I’m walking rows with a flashlight. It’s like having an agronomist on payroll for the price of a coffee.”</blockquote>
+            <figcaption><span class="avatar a3">TH</span><span><strong>Tomás Herrera</strong><small>Maize &amp; soy, Córdoba · 610 ha</small></span></figcaption>
+          </figure>
+
+          <figure class="quote-card">
+            <div class="stars small"><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></div>
+            <blockquote>“NDVI alerts flagged water stress in one pivot three days before wilting showed. We cut irrigation 34% with zero yield loss.”</blockquote>
+            <figcaption><span class="avatar a4">SW</span><span><strong>Sarah Whitmore</strong><small>Wheat &amp; sorghum, Kansas · 1,800 ac</small></span></figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PRICING ============ -->
+    <section class="section" id="pricing">
+      <div class="container">
+        <div class="section-head">
+          <span class="eyebrow">Pricing</span>
+          <h2 class="section-title">Priced for every <em>acre</em>.</h2>
+          <div class="billing-toggle" role="group" aria-label="Billing period">
+            <span class="bt-label" id="btMonthly">Monthly</span>
+            <button class="switch" id="billingSwitch" role="switch" aria-checked="false" aria-labelledby="btMonthly btYearly"><span class="knob"></span></button>
+            <span class="bt-label muted" id="btYearly">Yearly <em class="save-pill">2 months free</em></span>
+          </div>
+        </div>
+
+        <div class="pricing-grid">
+          <div class="plan-card">
+            <h3>Starter</h3>
+            <p class="plan-for">For trying AgroIntel on a single field</p>
+            <div class="plan-price"><span class="amount">$0</span><span class="per">forever</span></div>
+            <ul class="plan-list">
+              <li>1 field, up to 10 acres</li>
+              <li>10 photo diagnoses / month</li>
+              <li>Ask Agro (20 questions / month)</li>
+              <li>Community support</li>
+            </ul>
+            <a href="get-started.html?plan=starter" class="btn btn-outline btn-block">Start free</a>
+          </div>
+
+          <div class="plan-card plan-popular">
+            <span class="popular-badge">Most popular</span>
+            <h3>Grower</h3>
+            <p class="plan-for">For serious operations that want the full brain</p>
+            <div class="plan-price"><span class="amount" data-monthly="$29" data-yearly="$24">$29</span><span class="per" data-monthly="/ month, billed monthly" data-yearly="/ month, billed yearly">/ month, billed monthly</span></div>
+            <ul class="plan-list">
+              <li>Up to 25 fields, unlimited acres</li>
+              <li>500 diagnoses / month, severity-graded</li>
+              <li>Weekly NDVI scans + stress alerts</li>
+              <li>Unlimited Ask Agro, 28 languages</li>
+              <li>Yield forecasting &amp; spray windows</li>
+              <li>Priority agronomist support</li>
+            </ul>
+            <a href="get-started.html?plan=grower" class="btn btn-primary btn-block">Start 14-day trial</a>
+          </div>
+
+          <div class="plan-card">
+            <h3>Enterprise</h3>
+            <p class="plan-for">Co-ops, estates and multi-region operations</p>
+            <div class="plan-price"><span class="amount">Custom</span><span class="per">annual agreement</span></div>
+            <ul class="plan-list">
+              <li>Unlimited fields &amp; API access</li>
+              <li>Daily NDVI + private satellite tasking</li>
+              <li>On-call human agronomist, 24/7</li>
+              <li>ERP / FMS integrations &amp; SSO</li>
+              <li>Dedicated onboarding &amp; SLA</li>
+            </ul>
+            <a href="mailto:sales@agrointel.ag" class="btn btn-outline btn-block">Talk to sales</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section class="section section-tinted" id="faq">
+      <div class="container faq-wrap">
+        <div class="section-head left">
+          <span class="eyebrow">FAQ</span>
+          <h2 class="section-title">Before you <em>ask</em>.</h2>
+          <p class="section-sub">Everything growers usually want to know. Still stuck? <a class="inline-link" href="mailto:hello@agrointel.ag">hello@agrointel.ag</a></p>
+        </div>
+        <div class="faq-list">
+          <div class="faq-item open">
+            <button class="faq-q" aria-expanded="true"><span>What do I need to get started?</span><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+            <div class="faq-a"><div class="faq-a-inner"><p>A browser and one field. Open <a href="#analysis" class="inline-link">NASA Live</a>, drop a pin on your farm and you’ll see your last MODIS pass in seconds. Ask Agro anything — no forms, no sensors, no hardware required.</p></div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false"><span>Which NASA data powers AgroIntel?</span><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+            <div class="faq-a"><div class="faq-a-inner"><p><strong>MODIS (Terra/Aqua)</strong> for true-color and NDVI 8-Day imagery via <strong>NASA GIBS</strong>; <strong>NASA POWER</strong> (Agroclimatology, daily) for rainfall, temperature extremes and root-zone wetness (GWETROOT) — 731 days, live on this page. Everything is free and open; no API keys on your side.</p></div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false"><span>Does it work without internet in the field?</span><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+            <div class="faq-a"><div class="faq-a-inner"><p>Yes. The mobile app caches your fields and runs on-device diagnosis offline. Results sync automatically when you’re back in coverage, so scouting never stops at the gate.</p></div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false"><span>Which crops and languages are supported?</span><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+            <div class="faq-a"><div class="faq-a-inner"><p>120+ crops tracked — tomato, grapes, cotton, paddy, maize, soy and more, with depth on horticulture and row crops. Ask Agro replies in whatever language you ask it — Hindi, Marathi, Spanish, Portuguese, Swahili and more.</p></div></div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q" aria-expanded="false"><span>Can I cancel anytime?</span><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/></svg></button>
+            <div class="faq-a"><div class="faq-a-inner"><p>Absolutely. No lock-in, no cancellation fees. Export your field history anytime — your data belongs to you, and we delete it on request within 30 days.</p></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FINAL CTA ============ -->
+    <section class="section cta-section" id="cta">
+      <div class="container">
+        <div class="cta-panel">
+          <div class="cta-glow" aria-hidden="true"></div>
+          <div class="cta-copy">
+            <span class="eyebrow light">Early access · Kharif 2026 cohort</span>
+            <h2>Your next season starts <em>smarter</em>.</h2>
+            <p>Join 12,000+ growers using AgroIntel to see disease first, spray less and harvest more.</p>
+            <ul class="cta-points">
+              <li><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> Free 14-day Grower trial</li>
+              <li><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> No credit card required</li>
+              <li><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg> Cancel anytime, export anytime</li>
+            </ul>
+          </div>
+          <form class="cta-form" id="ctaForm" novalidate>
+            <label for="ctaEmail" class="cta-label">Work email</label>
+            <input type="email" id="ctaEmail" name="email" placeholder="you@greenharvest.coop" required />
+            <label for="ctaFarmSize" class="cta-label">Farm size</label>
+            <select id="ctaFarmSize" name="farmSize" required>
+              <option value="" selected disabled>Select…</option>
+              <option value="small">Under 25 acres / 10 ha</option>
+              <option value="medium">25–250 acres / 10–100 ha</option>
+              <option value="large">250–2,500 acres / 100–1,000 ha</option>
+              <option value="estate">2,500+ acres / co-op or estate</option>
+            </select>
+            <button type="submit" class="btn btn-lime btn-block btn-lg">Get early access
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8.7 5.3 10.1 3.9 16.2 10l-6.1 6.1-1.4-1.4 3.7-3.7z"/></svg>
+            </button>
+            <p class="cta-micro">We’ll carry these over — no retyping. No spam, ever.</p>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a href="#top" class="logo" aria-label="AgroIntel home">
+            <svg class="logo-mark" viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="#a3e635"/><path d="M22.6 9.4c-6.6.6-11 3.5-13.2 8.8-.8 2-1.2 4-1.2 5.4 1.5 0 3.4-.4 5.5-1.2 5.3-2.2 8.1-6.6 8.9-13z" fill="#14532d"/></svg>
+            <span class="logo-word light">Agro<em>Intel</em></span>
+          </a>
+          <p>The field brain for modern agriculture — see disease first, spray less, harvest more.</p>
+          <div class="social-row">
+            <a href="https://x.com" aria-label="AgroIntel on X" rel="noopener"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h3.3l6.1 8.7L18.4 4H21l-6.9 9.1L21.6 20h-3.3l-6.5-7.6L5.4 20H3l7.2-7.4z"/></svg></a>
+            <a href="https://www.linkedin.com" aria-label="AgroIntel on LinkedIn" rel="noopener"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6.94 8.5a2.06 2.06 0 1 0-.02-4.12 2.06 2.06 0 0 0 .02 4.12zM5.2 10h3.5v9.5H5.2zm5.6 0h3.35v1.3h.05a3.7 3.7 0 0 1 3.34-1.83c3.6 0 4.26 2.36 4.26 5.4v4.63h-3.5v-4.1c0-.98-.02-2.25-1.37-2.25-1.37 0-1.58 1.07-1.58 2.18v4.17h-3.5z"/></svg></a>
+            <a href="https://www.youtube.com" aria-label="AgroIntel on YouTube" rel="noopener"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M23 12s0-3.9-.5-5.8a2.9 2.9 0 0 0-2.1-2C18.6 3.6 12 3.6 12 3.6s-6.6 0-8.4.6a2.9 2.9 0 0 0-2 2C1 8.1 1 12 1 12s0 3.9.5 5.8a2.9 2.9 0 0 0 2.1 2c1.8.6 8.4.6 8.4.6s6.6 0 8.4-.6a2.9 2.9 0 0 0 2-2c.5-1.9.5-5.8.5-5.8zM10.3 15.6V8.4l5.8 3.6z"/></svg></a>
+          </div>
+        </div>
+        <nav class="footer-col" aria-label="Product">
+          <h4>Product</h4>
+          <a href="#features">Photo diagnosis</a>
+          <a href="analyse.html">Crop Analyse report</a>
+          <a href="#ask">Ask Agro (Gemini AI)</a>
+          <a href="#analysis">NASA live map</a>
+          <a href="#crops">Crop library</a>
+          <a href="#features">NDVI monitoring</a>
+          <a href="#pricing">Pricing</a>
+          <a href="#how">How it works</a>
+        </nav>
+        <nav class="footer-col" aria-label="Company">
+          <h4>Company</h4>
+          <a href="#stories">Customers</a>
+          <a href="mailto:careers@agrointel.ag">Careers</a>
+          <a href="mailto:research@agrointel.ag">Research</a>
+          <a href="mailto:press@agrointel.ag">Press</a>
+        </nav>
+        <nav class="footer-col" aria-label="Resources">
+          <h4>Resources</h4>
+          <a href="#faq">Help center</a>
+          <a href="#faq">Crop library</a>
+          <a href="#faq">API docs</a>
+          <a href="#faq">Field notes blog</a>
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <p>© <span id="year">2026</span> AgroIntel Inc. All rights reserved. · Built on open <a href="https://www.nasa.gov/" rel="noopener" style="color:inherit;text-decoration:underline;text-underline-offset:2px">NASA</a> data — GIBS · POWER · Worldview</p>
+        <div class="footer-legal">
+          <a href="#">Privacy</a><a href="#">Terms</a><a href="#">DPA</a>
+          <span class="status"><span class="status-dot"></span> All systems operational</span>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

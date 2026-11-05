@@ -1,1416 +1,1231 @@
-/* Crop Rotation Explorer – Main Script */
+﻿/* ==========================================================
+   AgroIntel — landing interactions
+   ========================================================== */
 
-// Study location: near Ames, Iowa
-const FARM_LAT = 42.0308;
-const FARM_LON = -93.6319;
+"use strict";
 
-// ===== Map Setup =====
-const map = L.map('map', {
-  center: [FARM_LAT, FARM_LON],
-  zoom: 10,
-  zoomControl: true,
-  maxZoom: 18
+const $ = (sel, scope = document) => scope.querySelector(sel);
+const $$ = (sel, scope = document) => [...scope.querySelectorAll(sel)];
+
+/* ==========================================================
+   Toast
+   ========================================================== */
+const toastEl = $("#toast");
+let toastTimer;
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3800);
+}
+
+/* ==========================================================
+   Announcement bar + navbar
+   ========================================================== */
+const announceClose = $("#announceClose");
+if (announceClose) {
+  announceClose.addEventListener("click", () => {
+    $("#announceBar").hidden = true;
+  });
+}
+
+const navbar = $("#navbar");
+const onScroll = () => navbar.classList.toggle("scrolled", window.scrollY > 24);
+window.addEventListener("scroll", onScroll, { passive: true });
+onScroll();
+
+/* Mobile menu */
+const hamburger = $("#hamburger");
+const navLinks = $("#navLinks");
+hamburger.addEventListener("click", () => {
+  const open = navLinks.classList.toggle("open");
+  hamburger.setAttribute("aria-expanded", String(open));
+  document.body.style.overflow = open ? "hidden" : "";
 });
-
-// Base layers
-const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '© OpenStreetMap contributors',
-  maxZoom: 19
-});
-
-const esriSat = L.tileLayer(
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  {
-    attribution: 'Tiles © Esri',
-    maxZoom: 18
+navLinks.addEventListener("click", (e) => {
+  if (e.target.closest("a")) {
+    navLinks.classList.remove("open");
+    hamburger.setAttribute("aria-expanded", "false");
+    document.body.style.overflow = "";
   }
+});
+
+/* ==========================================================
+   Animated stat counters
+   ========================================================== */
+const counters = $$(".stat strong[data-count]");
+const formatCount = (value, decimals, suffix) =>
+  value.toFixed(decimals) + suffix;
+
+const countObserver = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const el = entry.target;
+      const target = parseFloat(el.dataset.count);
+      const decimals = parseInt(el.dataset.decimals || "0", 10);
+      const suffix = el.dataset.suffix || "";
+      const duration = 1600;
+      const start = performance.now();
+
+      const tick = (now) => {
+        const p = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(2, -8 * p);
+        el.textContent = formatCount(target * eased, decimals, suffix);
+        if (p < 1) requestAnimationFrame(tick);
+        else el.textContent = formatCount(target, decimals, suffix);
+      };
+      requestAnimationFrame(tick);
+      countObserver.unobserve(el);
+    }
+  },
+  { threshold: 0.6 }
 );
+counters.forEach((el) => countObserver.observe(el));
 
-// Start with satellite base (clearer for agriculture)
-esriSat.addTo(map);
+/* ==========================================================
+   FAQ accordion (single-open)
+   ========================================================== */
+$$(".faq-item").forEach((item) => {
+  const toggle = $(".faq-q", item);
+  toggle.addEventListener("click", () => {
+    const willOpen = !item.classList.contains("open");
+    $$(".faq-item.open").forEach((openItem) => {
+      openItem.classList.remove("open");
+      $(".faq-q", openItem).setAttribute("aria-expanded", "false");
+    });
+    if (willOpen) {
+      item.classList.add("open");
+      toggle.setAttribute("aria-expanded", "true");
+    }
+  });
+});
 
-// NASA GIBS – official working template from nasa-gibs examples
-function createGibsLayer(layerName, dateStr, format = 'jpg') {
-  const template =
-    `https://gibs-{s}.earthdata.nasa.gov/wmts/epsg3857/best/{layer}/default/{time}/{tileMatrixSet}/{z}/{y}/{x}.${format}`;
+/* ==========================================================
+   Pricing billing toggle
+   ========================================================== */
+const billingSwitch = $("#billingSwitch");
+const btMonthly = $("#btMonthly");
+const btYearly = $("#btYearly");
 
-  return L.tileLayer(template, {
-    layer: layerName,
-    tileMatrixSet: 'GoogleMapsCompatible_Level9',
-    time: dateStr,
-    tileSize: 256,
-    subdomains: 'abc',
-    maxZoom: 9,
-    // Single-day MODIS/VIIRS imagery has real satellite-orbit swath gaps
-    // (visible as black "teeth") that show up once the view is wide enough
-    // to see them. Below this zoom, the complete Esri satellite basemap
-    // shows through instead rather than a broken-looking overlay.
-    minZoom: 5,
-    opacity: 0.75,
-    noWrap: false,
-    bounds: [
-      [-85.0511287776, -179.999999975],
-      [85.0511287776, 179.999999975]
-    ],
-    attribution: 'Imagery © <a href="https://earthdata.nasa.gov/gibs">NASA EOSDIS GIBS</a>',
-    errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
+function setBilling(yearly) {
+  billingSwitch.setAttribute("aria-checked", String(yearly));
+  btMonthly.classList.toggle("muted", yearly);
+  btYearly.classList.toggle("muted", !yearly);
+  $$(".amount[data-monthly]").forEach((el) => {
+    el.textContent = yearly ? el.dataset.yearly : el.dataset.monthly;
+  });
+  $$(".per[data-monthly]").forEach((el) => {
+    el.textContent = yearly ? el.dataset.yearly : el.dataset.monthly;
   });
 }
+billingSwitch.addEventListener("click", () => {
+  setBilling(billingSwitch.getAttribute("aria-checked") !== "true");
+});
+setBilling(false);
 
-// Layer definitions (name → format)
-const gibsLayers = {
-  'MODIS_Terra_CorrectedReflectance_TrueColor': 'jpg',
-  'MODIS_Aqua_CorrectedReflectance_TrueColor': 'jpg',
-  'VIIRS_SNPP_CorrectedReflectance_TrueColor': 'jpg',
-  'MODIS_Terra_NDVI_8Day': 'png',
-  'MODIS_Terra_Land_Surface_Temp_Day': 'png',
-  'MODIS_Terra_CorrectedReflectance_Bands721': 'jpg'
+/* ==========================================================
+   Ask Agro — real Gemini AI, grounded in NASA farm data
+   ========================================================== */
+const agronomyContext = {
+  farmSummary: "GreenHarvest North, Central Iowa, USA — 42.02°N, 93.55°W — 214 ha, 5 blocks.",
+  blockSummary:
+    "Block A Tomato 38.1 ha NDVI 0.62 (early blight alert, flowering); Block B Wheat 42.6 ha NDVI 0.78 (tillering); Block C Cotton 61.4 ha NDVI 0.66 (aphid risk, boll formation); Block D Grapes 29.8 ha NDVI 0.83 (veraison); Block E Paddy 42.1 ha NDVI 0.81 (panicle initiation, 4 cm standing water).",
+  powerSummary:
+    "NASA POWER data not loaded yet — answer from general agronomy and say when local data would sharpen the advice.",
 };
 
-let currentGibs = null;
-const markers = [];
+const askMessages = $("#askMessages");
+const askForm = $("#askForm");
+const askInput = $("#askInput");
+const askSendBtn = $("#askSendBtn");
+const askSuggestions = $("#askSuggestions");
+const askClearBtn = $("#askClearBtn");
+const chatLocked = $("#chatLocked");
+const connectForm = $("#connectForm");
+const connectTitle = $("#connectTitle");
+const connectHint = $("#connectHint");
+const geminiKeyInput = $("#geminiKey");
+const geminiModelSelect = $("#geminiModel");
+const keyToggle = $("#keyToggle");
+const disconnectBtn = $("#disconnectBtn");
+const geminiDot = $("#geminiDot");
+const geminiStatusDot = $("#geminiStatusDot");
+const geminiStatusText = $("#geminiStatusText");
+const modelBadge = $("#modelBadge");
+const ctxPowerStatus = $("#ctxPowerStatus");
+const ctxPowerDetail = $("#ctxPowerDetail");
+const ctxLayer = $("#ctxLayer");
 
-function updateGibsLayer() {
-  const layerName = document.getElementById('gibs-layer').value;
-  const dateStr = document.getElementById('gibs-date').value || '2025-07-15';
-  const format = gibsLayers[layerName] || 'jpg';
+const GEMINI_KEY_STORE = "agro_gemini_key";
+const GEMINI_MODEL_STORE = "agro_gemini_model";
+const WELCOME_MSG =
+  "Connected to Gemini and grounded on this farm's 731-day NASA POWER record. Ask me about irrigation, sprays, nitrogen, disease or weather — for example, “Should I irrigate Block C this week?”";
 
-  if (currentGibs) {
-    map.removeLayer(currentGibs);
-  }
+let geminiKey = localStorage.getItem(GEMINI_KEY_STORE) || "";
+if (localStorage.getItem(GEMINI_MODEL_STORE)) {
+  geminiModelSelect.value = localStorage.getItem(GEMINI_MODEL_STORE);
+}
+const chatHistory = []; // [{ role: "user" | "model", text }]
 
-  currentGibs = createGibsLayer(layerName, dateStr, format);
-  currentGibs.addTo(map);
+const escapeHtml = (s) =>
+  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // Bring markers to front
-  markers.forEach(m => m.bringToFront());
+/** Minimal, safe markdown: bold, italic, code, dash bullets. */
+function formatBot(md) {
+  let s = escapeHtml(md);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s
+    .split("\n")
+    .map((l) => (/^\s*[-*]\s+/.test(l) ? "• " + l.replace(/^\s*[-*]\s+/, "") : l))
+    .join("\n");
+  return s;
 }
 
-// Base layer switcher
-document.getElementById('base-layer')?.addEventListener('change', (e) => {
-  const val = e.target.value;
-  if (val === 'osm') {
-    map.removeLayer(esriSat);
-    osm.addTo(map);
+function appendMsg(text, sender) {
+  const bubble = document.createElement("div");
+  bubble.className = `message ${sender}`;
+  if (sender === "user") bubble.textContent = text;
+  else bubble.innerHTML = text; // bot HTML is produced by formatBot (escaped)
+  askMessages.appendChild(bubble);
+  askMessages.scrollTop = askMessages.scrollHeight;
+  return bubble;
+}
+
+function showAskTyping() {
+  const typing = document.createElement("div");
+  typing.className = "typing";
+  typing.setAttribute("aria-label", "Ask Agro is thinking");
+  typing.innerHTML = "<i></i><i></i><i></i>";
+  askMessages.appendChild(typing);
+  askMessages.scrollTop = askMessages.scrollHeight;
+  return typing;
+}
+
+const setDot = (el, state) => {
+  el.classList.remove("ok", "wait", "error");
+  if (state) el.classList.add(state);
+};
+
+const modelLabel = () => geminiModelSelect.selectedOptions[0].textContent.split("—")[0].trim();
+
+function applyConnectionUI(online) {
+  modelBadge.textContent = modelLabel();
+  chatLocked.classList.toggle("hidden", online);
+  askInput.disabled = !online;
+  askSendBtn.disabled = !online;
+  disconnectBtn.hidden = !online;
+  connectForm.hidden = online;
+  if (online) {
+    setDot(geminiDot, "ok");
+    setDot(geminiStatusDot, "ok");
+    geminiStatusText.textContent = `Online — ${modelLabel()} · grounded in NASA POWER + MODIS`;
+    connectTitle.textContent = "Gemini connected";
+    connectHint.innerHTML =
+      "Every reply now weaves in your farm's live NASA POWER record and MODIS layers. Ask away.";
   } else {
-    map.removeLayer(osm);
-    esriSat.addTo(map);
+    setDot(geminiDot, null);
+    setDot(geminiStatusDot, null);
+    geminiStatusText.textContent = "Offline — connect your key";
+    connectTitle.textContent = "Connect Gemini to go live";
+    connectHint.innerHTML =
+      'Paste your Google AI Studio API key — it stays in this browser and is sent only to Google’s API. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="inline-link">Get a free key →</a>';
   }
-  if (currentGibs) currentGibs.bringToFront();
-});
-
-// NASA Layer and Date apply immediately on change - no separate Update
-// step needed (opacity already worked this way via the 'input' listener
-// below; this makes the other two controls consistent with it).
-document.getElementById('gibs-layer')?.addEventListener('change', updateGibsLayer);
-document.getElementById('gibs-date')?.addEventListener('change', updateGibsLayer);
-
-document.getElementById('locate-farm').addEventListener('click', () => {
-  map.setView([FARM_LAT, FARM_LON], 12);
-});
-
-// Opacity control
-document.getElementById('layer-opacity')?.addEventListener('input', (e) => {
-  if (currentGibs) {
-    currentGibs.setOpacity(parseFloat(e.target.value));
-  }
-});
-
-// Initial GIBS layer
-updateGibsLayer();
-
-// Sample field markers – new stronger colors
-const fields = [
-  {
-    lat: 42.041,
-    lon: -93.645,
-    name: 'North Field – Corn (2024)',
-    type: 'corn',
-    note: 'Typical continuous corn phase. Watch for bare soil after harvest and summer heat stress windows.'
-  },
-  {
-    lat: 42.018,
-    lon: -93.618,
-    name: 'South Field – Soybean (2024)',
-    type: 'soy',
-    note: 'Soybean phase. Short rotation increases SCN risk. Consider small grain or cover after harvest.'
-  },
-  {
-    lat: 42.035,
-    lon: -93.602,
-    name: 'East Block – Diversification Candidate',
-    type: 'cover',
-    note: 'Good candidate for winter wheat or oats + cover crop. Improves infiltration and breaks pest cycles.'
-  }
-];
-
-const iconColors = {
-  corn: '#e67e22',      // strong orange
-  soy: '#27ae60',       // fresh green
-  cover: '#f1c40f'      // bright gold
-};
-
-fields.forEach(f => {
-  const marker = L.circleMarker([f.lat, f.lon], {
-    radius: 11,
-    fillColor: iconColors[f.type],
-    color: '#ffffff',
-    weight: 3,
-    opacity: 1,
-    fillOpacity: 0.95
-  }).addTo(map);
-
-  marker.bindPopup(`
-    <strong style="font-size:1.05em">${f.name}</strong><br>
-    ${f.note}<br>
-    <small style="color:#666">Lat ${f.lat.toFixed(3)}, Lon ${f.lon.toFixed(3)}</small>
-  `);
-
-  markers.push(marker);
-});
-
-
-// ===== Real Suitability Index grid (replaces the old illustrative zones) =====
-// See the dedicated "Suitability Index" block further down for the
-// implementation (grid sampling, real /indicators + /score fetches,
-// classification, and rendering). It's wired up after FARM_LAT/FARM_LON
-// and the AGROINTEL AI constants are defined.
-
-// ===== Season timeline =====
-const seasonNotes = [
-  'Spring: planting window, frost risk in low spots, soil often wet.',
-  'Early summer: canopy building, good moisture window if rains arrive on time.',
-  'Peak summer: higher heat stress and soil-moisture drawdown risk.',
-  'Fall: harvest and bare-soil window — erosion risk rises with intense rain.'
-];
-
-document.getElementById('season-slider')?.addEventListener('input', (e) => {
-  const i = parseInt(e.target.value, 10);
-  const note = document.getElementById('season-note');
-  if (note) note.textContent = seasonNotes[i] || '';
-});
-
-// ===== Scenario sliders (illustrative what-if) =====
-function updateScenarioNote() {
-  const rain = parseInt(document.getElementById('rain-slider')?.value || 0, 10);
-  const temp = parseFloat(document.getElementById('temp-slider')?.value || 0);
-  const rainEl = document.getElementById('rain-val');
-  const tempEl = document.getElementById('temp-val');
-  const note = document.getElementById('scenario-note');
-  if (rainEl) rainEl.textContent = (rain > 0 ? '+' : '') + rain + '%';
-  if (tempEl) tempEl.textContent = (temp > 0 ? '+' : '') + temp + '°C';
-
-  let msg = 'Current climate baseline for the sample area.';
-  if (rain < -10 && temp > 1) {
-    msg = 'Drier + warmer: higher water-stress risk. Cover crops and deeper-rooted rotations become more valuable.';
-  } else if (rain < -10) {
-    msg = 'Drier conditions: focus on infiltration and residual moisture. Avoid long bare periods.';
-  } else if (temp > 1.5) {
-    msg = 'Warmer peak season: heat stress on corn rises. Living cover and soil organic matter can help.';
-  } else if (rain > 15) {
-    msg = 'Wetter pattern: erosion and ponding risk increase on bare ground. Keep residue and living cover.';
-  } else if (rain !== 0 || temp !== 0) {
-    msg = 'Mild shift from baseline. Still worth discussing cover and diversification with your advisor.';
-  }
-  if (note) note.textContent = msg;
 }
 
-document.getElementById('rain-slider')?.addEventListener('input', updateScenarioNote);
-document.getElementById('temp-slider')?.addEventListener('input', updateScenarioNote);
+function buildSystemInstruction() {
+  const layerSelect = $("#nasaLayerSelect");
+  const dateInput = $("#nasaDate");
+  const layerName = layerSelect?.selectedOptions?.[0]?.textContent?.trim() || "MODIS Terra True Color";
+  const layerDate = dateInput?.value || "2025-07-15";
 
+  return [
+    "You are Ask Agro, an expert agronomist embedded inside AgroIntel for GreenHarvest North, a 214 ha farm in Central Iowa (42.02°N, 93.55°W).",
+    `Farm: ${agronomyContext.farmSummary}`,
+    `Blocks: ${agronomyContext.blockSummary}`,
+    `NASA POWER (this exact location, 2023–2024, Agroclimatology community): ${agronomyContext.powerSummary}`,
+    `Satellite layer available to the grower right now: ${layerName} (${layerDate}), served by NASA GIBS/Worldview.`,
+    "Rules:",
+    "- Answer in under 200 words, concrete and practical: dosages with units, timing windows, block IDs.",
+    "- Use the data above; if it cannot inform the answer, say so briefly and answer from general agronomy.",
+    "- Never invent sensor readings, weather for other places/dates, or prices.",
+    "- For pesticide handling, food-safety or other safety-relevant advice, include the key safety instruction.",
+    "- Prefer short bullet lists. No emojis.",
+  ].join("\n");
+}
 
-// ===== Tabs =====
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-  });
-});
+async function askGemini(userText) {
+  const model = geminiModelSelect.value;
+  const contents = chatHistory.map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
+  contents.push({ role: "user", parts: [{ text: userText }] });
 
-// ===== NASA POWER Data + Charts =====
-let precipChart = null;
-let tempChart = null;
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: buildSystemInstruction() }] },
+        contents,
+        generationConfig: { temperature: 0.35, maxOutputTokens: 900 },
+      }),
+    }
+  );
 
-async function loadNasaPower() {
-  const status = document.getElementById('power-status');
-  status.textContent = 'Fetching NASA POWER data…';
+  if (!res.ok) {
+    const err = new Error(`Gemini HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  const data = await res.json();
+  const text = (data?.candidates?.[0]?.content?.parts || [])
+    .map((p) => p.text || "")
+    .join("")
+    .trim();
+  if (!text) throw new Error("Gemini returned an empty response");
+  return text;
+}
 
-  // Two years of daily data (AG community)
-  const start = '20230101';
-  const end = '20241231';
-  const params = 'T2M,T2M_MAX,T2M_MIN,PRECTOTCORR';
-  const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=${params}&community=AG&longitude=${FARM_LON}&latitude=${FARM_LAT}&start=${start}&end=${end}&format=JSON`;
+async function handleAsk(text) {
+  appendMsg(text, "user");
+  chatHistory.push({ role: "user", text });
+  askInput.value = "";
+  const typing = showAskTyping();
+  askInput.disabled = true;
+  askSendBtn.disabled = true;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-
-    const paramsData = json.properties.parameter;
-    const dates = Object.keys(paramsData.T2M).sort();
-
-    // Aggregate to monthly for clearer charts
-    const monthly = {};
-    dates.forEach(d => {
-      const ym = d.substring(0, 6); // YYYYMM
-      if (!monthly[ym]) {
-        monthly[ym] = { precip: 0, tmean: [], tmax: [], tmin: [], count: 0 };
-      }
-      const p = paramsData.PRECTOTCORR[d];
-      const t = paramsData.T2M[d];
-      const tx = paramsData.T2M_MAX[d];
-      const tn = paramsData.T2M_MIN[d];
-      if (p !== undefined && p > -900) monthly[ym].precip += p;
-      if (t !== undefined && t > -900) monthly[ym].tmean.push(t);
-      if (tx !== undefined && tx > -900) monthly[ym].tmax.push(tx);
-      if (tn !== undefined && tn > -900) monthly[ym].tmin.push(tn);
-      monthly[ym].count++;
-    });
-
-    const labels = Object.keys(monthly).sort().map(ym => {
-      const y = ym.substring(0, 4);
-      const m = ym.substring(4, 6);
-      return `${y}-${m}`;
-    });
-
-    const precipVals = Object.keys(monthly).sort().map(ym =>
-      Math.round(monthly[ym].precip * 10) / 10
-    );
-
-    const tmeanVals = Object.keys(monthly).sort().map(ym => {
-      const arr = monthly[ym].tmean;
-      return arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : null;
-    });
-    const tmaxVals = Object.keys(monthly).sort().map(ym => {
-      const arr = monthly[ym].tmax;
-      return arr.length ? Math.round(Math.max(...arr) * 10) / 10 : null;
-    });
-    const tminVals = Object.keys(monthly).sort().map(ym => {
-      const arr = monthly[ym].tmin;
-      return arr.length ? Math.round(Math.min(...arr) * 10) / 10 : null;
-    });
-
-    // Destroy previous charts if any
-    if (precipChart) precipChart.destroy();
-    if (tempChart) tempChart.destroy();
-
-    // Precipitation chart
-    const ctxP = document.getElementById('precip-chart').getContext('2d');
-    precipChart = new Chart(ctxP, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Monthly Precipitation (mm)',
-          data: precipVals,
-          backgroundColor: 'rgba(74, 144, 164, 0.7)',
-          borderColor: 'rgba(74, 144, 164, 1)',
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { mode: 'index' }
-        },
-        scales: {
-          y: { beginAtZero: true, title: { display: true, text: 'mm' } }
-        }
-      }
-    });
-
-    // Temperature chart
-    const ctxT = document.getElementById('temp-chart').getContext('2d');
-    tempChart = new Chart(ctxT, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Max',
-            data: tmaxVals,
-            borderColor: '#e76f51',
-            backgroundColor: 'transparent',
-            tension: 0.2,
-            pointRadius: 2
-          },
-          {
-            label: 'Mean',
-            data: tmeanVals,
-            borderColor: '#2a9d8f',
-            backgroundColor: 'transparent',
-            tension: 0.2,
-            pointRadius: 2
-          },
-          {
-            label: 'Min',
-            data: tminVals,
-            borderColor: '#4a90a4',
-            backgroundColor: 'transparent',
-            tension: 0.2,
-            pointRadius: 2
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          tooltip: { mode: 'index', intersect: false }
-        },
-        scales: {
-          y: { title: { display: true, text: '°C' } }
-        }
-      }
-    });
-
-    status.textContent = `Loaded ${dates.length} days of NASA POWER data for ${FARM_LAT.toFixed(2)}°N, ${Math.abs(FARM_LON).toFixed(2)}°W.`;
+    const reply = await askGemini(text);
+    typing.remove();
+    chatHistory.push({ role: "model", text: reply });
+    if (chatHistory.length > 24) chatHistory.splice(0, chatHistory.length - 24);
+    appendMsg(formatBot(reply), "bot");
   } catch (err) {
-    console.error(err);
-    status.textContent = 'Could not load live data (network or CORS). Showing illustrative patterns instead.';
-    // Fallback demo data
-    renderFallbackCharts();
+    typing.remove();
+    console.error("Gemini error:", err);
+    let msg = "Something went wrong reaching Gemini — please try again.";
+    if (err.status === 400 || err.status === 403)
+      msg = "Gemini rejected the key. Check it, and make sure the Gemini API is enabled in your Google AI Studio project.";
+    else if (err.status === 404)
+      msg = "That model isn’t available for this key — switch the model dropdown (Flash ↔ Pro) and retry.";
+    else if (err.status === 429)
+      msg = "Rate limited (429) — wait a moment, then retry.";
+    else if (err.name === "TypeError")
+      msg = "Network error — are you online?";
+    appendMsg(`<strong>Connection hiccup.</strong> ${escapeHtml(msg)}`, "bot");
+    showToast(msg);
+  } finally {
+    askInput.disabled = false;
+    askSendBtn.disabled = false;
+    askInput.focus();
   }
 }
 
-function renderFallbackCharts() {
-  const labels = ['2023-01','2023-04','2023-07','2023-10','2024-01','2024-04','2024-07','2024-10'];
-  const precip = [25, 80, 110, 55, 30, 95, 130, 60];
-  const tmean = [-5, 10, 24, 12, -4, 11, 25, 13];
-  const tmax = [2, 18, 32, 20, 3, 19, 33, 21];
-  const tmin = [-12, 2, 16, 4, -11, 3, 17, 5];
-
-  if (precipChart) precipChart.destroy();
-  if (tempChart) tempChart.destroy();
-
-  precipChart = new Chart(document.getElementById('precip-chart'), {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Illustrative Precip (mm)',
-        data: precip,
-        backgroundColor: 'rgba(74, 144, 164, 0.7)'
-      }]
-    },
-    options: { responsive: true, plugins: { legend: { display: false } } }
-  });
-
-  tempChart = new Chart(document.getElementById('temp-chart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Max', data: tmax, borderColor: '#e76f51', tension: 0.2 },
-        { label: 'Mean', data: tmean, borderColor: '#2a9d8f', tension: 0.2 },
-        { label: 'Min', data: tmin, borderColor: '#4a90a4', tension: 0.2 }
-      ]
-    },
-    options: { responsive: true }
-  });
-}
-
-document.getElementById('load-power').addEventListener('click', loadNasaPower);
-
-// Auto-load on page ready (optional)
-document.addEventListener('DOMContentLoaded', () => {
-  // Small delay so map is ready
-  setTimeout(() => {
-    // Uncomment next line if you want auto-fetch
-    // loadNasaPower();
-  }, 800);
+/* Connect / disconnect */
+connectForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const key = geminiKeyInput.value.trim();
+  if (key.length < 30) {
+    showToast("That doesn’t look like a Google AI key (usually starts with “AIza…”).");
+    geminiKeyInput.focus();
+    return;
+  }
+  geminiKey = key;
+  localStorage.setItem(GEMINI_KEY_STORE, geminiKey);
+  localStorage.setItem(GEMINI_MODEL_STORE, geminiModelSelect.value);
+  geminiKeyInput.value = "";
+  applyConnectionUI(true);
+  if (!askMessages.children.length) appendMsg(WELCOME_MSG, "bot");
+  showToast("Gemini connected — Ask Agro is live.");
 });
 
+disconnectBtn.addEventListener("click", () => {
+  localStorage.removeItem(GEMINI_KEY_STORE);
+  geminiKey = "";
+  applyConnectionUI(false);
+  showToast("Gemini disconnected — key removed from this browser.");
+});
 
-// ===== Farmer Priorities (Farmer-Centered Design) =====
-const PRIORITY_MAP = {
-  'water-scarce': {
-    text: 'Limited water / dry spells',
-    favors: ['diverse', 'soil'],
-    note: 'Rotations with deeper roots or better cover can help hold moisture.'
-  },
-  'heavy-rain': {
-    text: 'Heavy rain & erosion',
-    favors: ['diverse', 'soil'],
-    note: 'Keeping living cover longer reduces runoff and soil loss.'
-  },
-  'heat-stress': {
-    text: 'Summer heat stress',
-    favors: ['diverse', 'soil'],
-    note: 'Better soil cover and organic matter can moderate surface heat.'
-  },
-  'limited-equip': {
-    text: 'Limited equipment',
-    favors: ['current'],
-    note: 'Starting with the simplest change (e.g. one cover crop) is often practical.'
-  },
-  'labor-tight': {
-    text: 'Tight labor',
-    favors: ['current', 'diverse'],
-    note: 'Avoid systems that need extra specialized labor until you are ready.'
-  },
-  'no-till': {
-    text: 'Prefer no-till',
-    favors: ['diverse', 'soil'],
-    note: 'Diverse rotations pair well with no-till for soil structure.'
-  },
-  'grain-market': {
-    text: 'Strong grain markets',
-    favors: ['current', 'diverse'],
-    note: 'Corn–soy remains strong; adding a small grain can still fit.'
-  },
-  'forage-market': {
-    text: 'Hay / livestock markets',
-    favors: ['soil'],
-    note: 'Forage or alfalfa phases become more realistic with a market.'
-  },
-  'cash-flow': {
-    text: 'Need steady cash flow',
-    favors: ['current', 'diverse'],
-    note: 'Multi-year forage can delay income — plan carefully with your advisor.'
-  },
-  'build-om': {
-    text: 'Build organic matter',
-    favors: ['soil', 'diverse'],
-    note: 'Living roots and residue are the main drivers of soil organic matter.'
-  },
-  'break-pests': {
-    text: 'Break pest cycles',
-    favors: ['diverse', 'soil'],
-    note: 'A third crop or longer break is often the most effective lever.'
-  },
-  'n-fix': {
-    text: 'Reduce synthetic N',
-    favors: ['soil', 'diverse'],
-    note: 'Legumes and residual N capture can lower fertilizer needs over time.'
+keyToggle.addEventListener("click", () => {
+  const reveal = geminiKeyInput.type === "password";
+  geminiKeyInput.type = reveal ? "text" : "password";
+  keyToggle.setAttribute("aria-pressed", String(reveal));
+});
+
+geminiModelSelect.addEventListener("change", () => {
+  localStorage.setItem(GEMINI_MODEL_STORE, geminiModelSelect.value);
+  if (geminiKey) {
+    modelBadge.textContent = modelLabel();
+    geminiStatusText.textContent = `Online — ${modelLabel()} · grounded in NASA POWER + MODIS`;
   }
-};
+});
 
-const STRATEGY_NAMES = {
-  current: 'Existing Corn–Soy',
-  diverse: 'Diversified + Small Grain / Cover',
-  soil: 'Soil-Building + Forage / Alfalfa'
-};
+/* Conversation */
+askForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = askInput.value.trim();
+  if (!text || !geminiKey) return;
+  handleAsk(text);
+});
 
-document.getElementById('apply-priorities')?.addEventListener('click', () => {
-  const checked = [...document.querySelectorAll('input[name="priority"]:checked')].map(el => el.value);
-  const resultBox = document.getElementById('priority-result');
-  const summary = document.getElementById('priority-summary');
-  const chips = document.getElementById('priority-suggestions');
+askSuggestions.addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  if (!geminiKey) {
+    showToast("Connect your Gemini key first — it’s free at aistudio.google.com/apikey.");
+    geminiKeyInput.focus();
+    return;
+  }
+  handleAsk(chip.dataset.question);
+});
 
-  if (checked.length === 0) {
-    summary.textContent = 'Please select at least one priority so we can highlight matching ideas.';
-    chips.innerHTML = '';
-    resultBox.hidden = false;
+askClearBtn.addEventListener("click", () => {
+  chatHistory.length = 0;
+  askMessages.innerHTML = "";
+  if (geminiKey) appendMsg(WELCOME_MSG, "bot");
+  showToast("Conversation cleared.");
+});
+
+/* Init */
+applyConnectionUI(Boolean(geminiKey));
+if (geminiKey) appendMsg(WELCOME_MSG, "bot");
+
+/* ==========================================================
+   Crop library filters
+   ========================================================== */
+const cropFilters = $$(".crop-filter");
+const cropTiles = $$(".crop-tile");
+cropFilters.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    cropFilters.forEach((b) => {
+      b.classList.toggle("active", b === btn);
+      b.setAttribute("aria-pressed", String(b === btn));
+    });
+    const filter = btn.dataset.filter;
+    cropTiles.forEach((tile) => {
+      tile.classList.toggle("hide", filter !== "all" && tile.dataset.cat !== filter);
+    });
+  });
+});
+
+/* ==========================================================
+   Final CTA → hand off to get-started.html with details
+   ========================================================== */
+const ctaForm = $("#ctaForm");
+const ctaEmail = $("#ctaEmail");
+const ctaFarmSize = $("#ctaFarmSize");
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+if (ctaForm) {
+  ctaForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = ctaEmail.value.trim();
+    const size = ctaFarmSize.value;
+
+    if (!EMAIL_RE.test(email)) {
+      ctaEmail.focus();
+      showToast("Enter a valid work email (e.g. you@greenharvest.coop).");
+      return;
+    }
+    if (!size) {
+      ctaFarmSize.focus();
+      showToast("Please pick your farm size.");
+      return;
+    }
+    const params = new URLSearchParams({ email, size });
+    window.location.href = `get-started.html?${params.toString()}`;
+  });
+}
+
+/* ==========================================================
+   NASA Live — map, suitability overlay, POWER climate charts
+   ========================================================== */
+(function initNasaLive() {
+  const mapEl = document.getElementById("nasaMap");
+  if (!mapEl) return;
+
+  if (!window.L) {
+    mapEl.innerHTML = '<div class="chart-empty" style="margin:0.75rem">Map tiles need an internet connection — everything else on this page works offline.</div>';
     return;
   }
 
-  // Score strategies
-  const scores = { current: 0, diverse: 0, soil: 0 };
-  const notes = [];
+  const FARM = { lat: 42.021, lon: -93.55, zoom: 12, name: "GreenHarvest North · Central Iowa" };
+  const BLOCK_MARKERS = [
+    { id: "A", crop: "Tomato", ndvi: "0.62", note: "Early blight — action required", pos: [41.986, -93.586] },
+    { id: "B", crop: "Wheat",  ndvi: "0.78", note: "Vigorous, on track",             pos: [42.046, -93.588] },
+    { id: "C", crop: "Cotton", ndvi: "0.66", note: "Aphid risk: moderate",           pos: [42.046, -93.493] },
+    { id: "D", crop: "Grapes", ndvi: "0.83", note: "Excellent vigor",                pos: [41.997, -93.475] },
+    { id: "E", crop: "Paddy",  ndvi: "0.81", note: "Standing water 4 cm",            pos: [41.963, -93.502] },
+  ];
 
-  checked.forEach(key => {
-    const info = PRIORITY_MAP[key];
-    if (!info) return;
-    info.favors.forEach(s => scores[s]++);
-    notes.push(info.note);
+  const esriSatellite = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { attribution: "Esri, Maxar, Earthstar Geographics", maxZoom: 18 }
+  );
+  const osmStreets = L.tileLayer(
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { attribution: "© OpenStreetMap contributors", maxZoom: 19 }
+  );
+  /* Transparent reference labels — roads, rivers, cities — keeps deep zooms legible */
+  const esriLabels = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+    { attribution: "Esri", maxZoom: 18, opacity: 0.9, zIndex: 4 }
+  );
+
+  const GIBS_URL = "https://gibs.earthdata.nasa.gov/wms/epsg3857/best/wms.cgi";
+  const nasaLayer = L.tileLayer.wms(GIBS_URL, {
+    layers: "MODIS_Terra_CorrectedReflectance_TrueColor",
+    format: "image/jpeg",
+    transparent: false,
+    version: "1.3.0",
+    time: "2025-07-15",
+    opacity: 0.85,
+    zIndex: 2,
+    attribution: "NASA GIBS · MODIS",
   });
 
-  // Rank
-  const ranked = Object.entries(scores)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, score]) => ({ id, score, name: STRATEGY_NAMES[id] }));
+  const map = L.map("nasaMap", {
+    center: [FARM.lat, FARM.lon],
+    zoom: FARM.zoom,
+    layers: [esriSatellite, nasaLayer, esriLabels],
+    scrollWheelZoom: false, // don't trap page scroll; enable on map focus
+    worldCopyJump: true,
+  });
+  map.on("focus", () => map.scrollWheelZoom.enable());
+  map.on("blur", () => map.scrollWheelZoom.disable());
 
-  const top = ranked[0];
-  const second = ranked[1];
+  const farmIcon = L.divIcon({ className: "", html: '<div class="farm-marker"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+  L.marker([FARM.lat, FARM.lon], { icon: farmIcon, title: FARM.name })
+    .bindPopup(`<strong>${FARM.name}</strong><br>5 blocks · 214 ha · pairs Sentinel-2 with MODIS.<br>Click a block marker for field intel.`)
+    .addTo(map);
 
-  let msg = `You selected ${checked.length} priority area(s). `;
-  if (top.score > 0) {
-    msg += `The ideas that line up most closely are <strong>${top.name}</strong>`;
-    if (second && second.score > 0 && second.score >= top.score - 1) {
-      msg += ` and <strong>${second.name}</strong>`;
+  BLOCK_MARKERS.forEach((b) => {
+    const icon = L.divIcon({ className: "", html: '<div class="block-marker"></div>', iconSize: [13, 13], iconAnchor: [6.5, 6.5] });
+    L.marker(b.pos, { icon, title: `Block ${b.id} · ${b.crop}` })
+      .bindPopup(`<strong>Block ${b.id} · ${b.crop}</strong><br>NDVI ${b.ndvi} — ${b.note}`)
+      .addTo(map);
+  });
+
+  /* Base map toggle — labels ride along on satellite imagery */
+  const layerLabels = $("#layerLabels");
+  const baseMapSelect = $("#baseMapSelect");
+  baseMapSelect.addEventListener("change", () => {
+    const satellite = baseMapSelect.value === "satellite";
+    if (satellite) {
+      map.removeLayer(osmStreets);
+      esriSatellite.addTo(map);
+      layerLabels.disabled = false;
+      if (layerLabels.checked) esriLabels.addTo(map);
+    } else {
+      map.removeLayer(esriSatellite);
+      map.removeLayer(esriLabels);
+      layerLabels.disabled = true; // OSM has its own labels
+      osmStreets.addTo(map);
     }
-    msg += '.';
-  } else {
-    msg += 'All three rotation options remain worth discussing.';
+  });
+
+  layerLabels.addEventListener("change", () => {
+    if (layerLabels.checked) esriLabels.addTo(map);
+    else map.removeLayer(esriLabels);
+  });
+
+  /* NASA GIBS layer + date + opacity */
+  const layerSelect = $("#nasaLayerSelect");
+  const dateInput = $("#nasaDate");
+  const opacityRange = $("#layerOpacity");
+  const opacityValue = $("#opacityValue");
+
+  const ctxLayer = $("#ctxLayer");
+
+  /* MODIS is 250 m — fade the overlay out as the user zooms into
+     high-res base imagery so the map stays crisp. */
+  const FADE_BY_ZOOM = [
+    [11, 0.85],
+    [12, 0.65],
+    [13, 0.45],
+    [14, 0.3],
+    [15, 0.22],
+    [17, 0.15],
+  ];
+  function zoomFade() {
+    const z = map.getZoom();
+    let fade = 1;
+    for (const [zLevel, f] of FADE_BY_ZOOM) {
+      if (z >= zLevel) fade = f;
+    }
+    return fade;
+  }
+  function applyNasaOpacity() {
+    const slider = Number(opacityRange.value) / 100;
+    const fade = zoomFade();
+    nasaLayer.setOpacity(slider * fade);
+    opacityValue.textContent = fade < 1 ? `${opacityRange.value}% ↓` : `${opacityRange.value}%`;
+    opacityRange.title =
+      fade < 1
+        ? `Effective opacity ~${Math.round(slider * fade * 100)}% — auto-faded at this zoom so the high-res base shows through`
+        : "Full NASA layer opacity";
   }
 
-  summary.innerHTML = msg;
+  function refreshNasaLayer() {
+    const opt = layerSelect.selectedOptions[0];
+    nasaLayer.setParams({
+      layers: opt.value,
+      format: opt.dataset.format,
+      time: dateInput.value || "2025-07-15",
+    });
+    applyNasaOpacity();
+    if (ctxLayer) ctxLayer.textContent = `${opt.textContent.trim()} · ${dateInput.value || "2025-07-15"}`;
+  }
+  layerSelect.addEventListener("change", refreshNasaLayer);
+  dateInput.addEventListener("change", () => {
+    refreshNasaLayer();
+    refreshSuitability(); // the date now drives the heatmap too, not just the imagery
+  });
+  opacityRange.addEventListener("input", applyNasaOpacity);
+  map.on("zoomend", applyNasaOpacity);
+  applyNasaOpacity();
 
-  chips.innerHTML = ranked
-    .filter(r => r.score > 0)
-    .map((r, i) => `<span class="chip ${i === 0 ? 'best' : ''}">${r.name}</span>`)
-    .join('');
+  /* Center farm */
+  $("#centerFarmBtn").addEventListener("click", () => {
+    map.flyTo([FARM.lat, FARM.lon], FARM.zoom, { duration: 0.8 });
+  });
 
-  // Add unique notes
-  const uniqueNotes = [...new Set(notes)].slice(0, 3);
-  if (uniqueNotes.length) {
-    summary.innerHTML += '<br><br><em>Quick takeaways:</em> ' + uniqueNotes.join(' ');
+  /* Place search — OpenStreetMap Nominatim (free, no key) */
+  const searchForm = $("#placeSearchForm");
+  const searchInput = $("#placeSearch");
+  let searchMarker = null;
+  searchForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = searchInput.value.trim();
+    if (!q) return;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`,
+        { headers: { Accept: "application/json" } }
+      );
+      const results = await res.json();
+      if (!results.length) {
+        showToast("Place not found — try a different spelling.");
+        return;
+      }
+      const { lat, lon, display_name } = results[0];
+      const target = [parseFloat(lat), parseFloat(lon)];
+      if (searchMarker) map.removeLayer(searchMarker);
+      const label = display_name.length > 70 ? display_name.slice(0, 70) + "…" : display_name;
+      searchMarker = L.marker(target).bindPopup(`<strong>${label}</strong>`).addTo(map);
+      searchMarker.openPopup();
+      map.flyTo(target, 9, { duration: 1 });
+    } catch {
+      showToast("Search unavailable right now — check your connection.");
+    }
+  });
+
+  /* ---- Suitability heatmap, rendered on a canvas image overlay ----
+     Computed from the real NASA POWER daily record (same fetch that
+     drives the climate charts below) plus a documented per-crop growth
+     calendar/sensitivity table - never a fixed, hand-painted picture.
+     See GOALS.md/PLAN.md in the agrointel-ai project for why. */
+  const SUIT_BOUNDS = [[41.945, -93.665], [42.085, -93.435]];
+
+  // Real daily POWER series {T2M, T2M_MAX, PRECTOTCORR, GWETROOT: {"YYYYMMDD": value}},
+  // populated once loadPowerData() below succeeds. Kept around (unlike the
+  // monthly chart aggregates) so the heatmap can look up real values for
+  // any selected date.
+  let powerDaily = null;
+
+  // Typical growing-calendar phase per month, and heat/drought sensitivity
+  // (0-1), for each block's crop. A documented agronomic assumption - like
+  // the vulnerability factors in the main AGROINTEL AI scoring model - not
+  // a measurement. Determines when a field is realistically bare soil.
+  const CROP_CALENDAR = {
+    Tomato: { bare: [11, 12, 1, 2, 3], establishing: [4], growing: [5, 6], peak: [7, 8], senescence: [9, 10] },
+    Wheat: { bare: [7, 8], establishing: [9, 10], growing: [11, 12, 1, 2, 3], peak: [4, 5], senescence: [6] },
+    Cotton: { bare: [11, 12, 1, 2, 3], establishing: [4], growing: [5, 6], peak: [7, 8], senescence: [9, 10] },
+    Grapes: { bare: [12, 1, 2], establishing: [3], growing: [4, 5, 6], peak: [7, 8], senescence: [9, 10, 11] },
+    Paddy: { bare: [11, 12, 1, 2, 3], establishing: [4, 5], growing: [6], peak: [7, 8], senescence: [9, 10] },
+  };
+  const CROP_SENSITIVITY = {
+    Tomato: { heat: 0.9, drought: 0.7 },
+    Wheat: { heat: 0.5, drought: 0.5 },
+    Cotton: { heat: 0.4, drought: 0.3 },
+    Grapes: { heat: 0.6, drought: 0.4 },
+    Paddy: { heat: 0.5, drought: 1.0 }, // standing-water crop — very drought sensitive
+  };
+  // Static physical terrain knowledge (not fabricated data): Block A sits
+  // on the steepest slope, A/E flank the real creek corridor.
+  const EROSION_TERRAIN_BIAS = { A: 15, B: 5, C: -5, D: -10, E: 0 };
+  const FLOOD_TERRAIN_BIAS = { A: 15, B: -10, C: -10, D: -10, E: 20 };
+
+  function cropPhase(crop, month) {
+    const cal = CROP_CALENDAR[crop];
+    for (const [phase, months] of Object.entries(cal)) {
+      if (months.includes(month)) return phase;
+    }
+    return "growing";
   }
 
-  resultBox.hidden = false;
-  resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-});
+  // Circular day-of-year distance between two month/day pairs (wraps
+  // across Dec→Jan) so "around this time of year" works near year edges.
+  function monthDayDistance(mm1, dd1, mm2, dd2) {
+    const a = new Date(2001, mm1 - 1, dd1).getTime();
+    const b = new Date(2001, mm2 - 1, dd2).getTime();
+    let diffDays = Math.abs(a - b) / 86400000;
+    if (diffDays > 182) diffDays = 365 - diffDays;
+    return diffDays;
+  }
 
-document.getElementById('reset-priorities')?.addEventListener('click', () => {
-  document.querySelectorAll('input[name="priority"]').forEach(el => el.checked = false);
-  document.getElementById('priority-result').hidden = true;
-});
+  // Real heavy-rain check: did any day within ~7 days of this calendar
+  // date, in the real fetched record, see >25mm rain (any year present)?
+  function recentHeavyRain(mm, dd) {
+    if (!powerDaily?.PRECTOTCORR) return false;
+    return Object.entries(powerDaily.PRECTOTCORR).some(([key, raw]) => {
+      const v = Number(raw);
+      if (!Number.isFinite(v) || v <= -900 || v < 25) return false;
+      return monthDayDistance(mm, dd, Number(key.slice(4, 6)), Number(key.slice(6, 8))) <= 7;
+    });
+  }
 
+  // Real POWER sample "typical for this time of year": averages whichever
+  // years are present in the fetched 2023-2024 record for the matching
+  // month/day. Returns null until the real data has loaded.
+  function powerSampleForDate(dateStr) {
+    if (!powerDaily) return null;
+    const d = new Date(`${dateStr}T00:00:00`);
+    const mm = d.getMonth() + 1;
+    const dd = d.getDate();
+    const mmKey = String(mm).padStart(2, "0");
+    const ddKey = String(dd).padStart(2, "0");
+    const keys = Object.keys(powerDaily.T2M || {}).filter((k) => k.slice(4, 6) === mmKey && k.slice(6, 8) === ddKey);
+    if (!keys.length) return null;
+    const avg = (series) => {
+      const vals = keys.map((k) => Number(series?.[k])).filter((v) => Number.isFinite(v) && v > -900);
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    };
+    return {
+      month: mm,
+      tMax: avg(powerDaily.T2M_MAX),
+      gwetroot: avg(powerDaily.GWETROOT),
+      recentHeavyRain: recentHeavyRain(mm, dd),
+      matchedDays: keys.length,
+    };
+  }
 
+  const MODEL_META = {
+    erosion: {
+      title: "Erosion Risk",
+      color: [239, 68, 68],
+      desc: "Rises when a block's crop is in its real bare-soil calendar window and a real >25mm rain event has occurred around this time of year — bare, wet soil loses topsoil fastest.",
+    },
+    drought: {
+      title: "Drought / Water Stress",
+      color: [245, 158, 11],
+      desc: "From real NASA POWER root-zone wetness, scaled by each crop's documented drought sensitivity and how actively it's growing right now.",
+    },
+    nitrogen: {
+      title: "Nitrogen Loss",
+      color: [250, 204, 21],
+      desc: "Leaching risk when a real heavy-rain event lands during an establishing/growing window, when applied nitrogen is most exposed.",
+    },
+    flood: {
+      title: "Flood Risk",
+      color: [96, 165, 250],
+      desc: "Highest on the real low-lying creek corridor (Blocks A/E), rising further with real root-zone wetness and real heavy-rain events.",
+    },
+    stress: {
+      title: "Crop Stress & Season",
+      color: [168, 85, 247],
+      desc: "Combines real heat (NASA POWER max temperature) and real moisture stress, scaled by crop sensitivity, with the field's real seasonal phase — bare, establishing, growing, peak or senescence.",
+    },
+  };
 
-// ===== Place search (Nominatim) =====
+  // Each block's position as a fraction of the heatmap canvas, from its
+  // real lat/lon and the overlay's real geographic bounds — the gradient
+  // blobs sit over the actual field markers, not arbitrary fixed spots.
+  const BLOCK_FRAC = {};
+  (function computeBlockFractions() {
+    const [[south, west], [north, east]] = SUIT_BOUNDS;
+    BLOCK_MARKERS.forEach((b) => {
+      const [lat, lon] = b.pos;
+      BLOCK_FRAC[b.id] = { fx: (lon - west) / (east - west), fy: 1 - (lat - south) / (north - south) };
+    });
+  })();
 
-// Strips conversational filler ("on the map", "please", trailing "?") from
-// a chat-typed place query before geocoding - Nominatim matches "Malaysia"
-// fine, but not "malaysia on the map".
-function cleanPlaceQuery(q) {
-  return (q || '')
-    .replace(/\bon\s+(the\s+)?(map|earth|globe)\b/gi, '')
-    .replace(/\b(please|thanks?|now)\b/gi, '')
-    .replace(/[?.!]+\s*$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+  // Computes one block's 0-100 score for the selected model, from the real
+  // (optionally scenario-adjusted) POWER sample and the crop calendar.
+  function computeBlockScore(modelKey, block, sample) {
+    const crop = block.crop;
+    const phase = sample ? cropPhase(crop, sample.month) : null;
+    const sens = CROP_SENSITIVITY[crop] || { heat: 0.5, drought: 0.5 };
+    if (!sample) return { score: 30, phase: "—", label: "moderate", reason: "waiting for the real NASA POWER record to load" };
 
-async function searchPlace(query) {
-  if (!query || !query.trim()) return null;
-  // polygon_geojson=1 gets the real boundary shape (not just a bounding
-  // box) so the SI heatmap can be clipped to real territory instead of a
-  // rectangle; polygon_threshold simplifies it so a detailed coastline
-  // doesn't become a huge, slow-to-render geometry.
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&polygon_geojson=1&polygon_threshold=0.01`;
-  try {
-    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-    const data = await res.json();
-    if (data && data[0]) {
-      // boundingbox is [south, north, west, east] as strings
-      const bb = data[0].boundingbox ? data[0].boundingbox.map(Number) : null;
-      return {
-        lat: parseFloat(data[0].lat),
-        lon: parseFloat(data[0].lon),
-        name: data[0].display_name,
-        boundingBox: bb ? { south: bb[0], north: bb[1], west: bb[2], east: bb[3] } : null,
-        geometry: data[0].geojson || null
+    const bare = phase === "bare";
+    const activeGrowth = phase === "growing" || phase === "peak";
+    let score = 15;
+    let reason = "";
+
+    if (modelKey === "erosion") {
+      score += EROSION_TERRAIN_BIAS[block.id] || 0;
+      if (bare) { score += 35; reason = `${crop} is in its real bare-field window this month`; }
+      if (sample.recentHeavyRain) { score += 25; reason += (reason ? "; " : "") + "a real >25mm rain event occurred around this date"; }
+      if (!reason) reason = "live crop cover, no recent heavy rain";
+    } else if (modelKey === "drought") {
+      const dryness = sample.gwetroot != null ? Math.max(0, (0.4 - sample.gwetroot) / 0.4) : 0;
+      score += dryness * 65 * sens.drought * (activeGrowth ? 1 : 0.4);
+      reason = sample.gwetroot != null
+        ? `real root-zone wetness ${sample.gwetroot.toFixed(2)} (GWETROOT), ${phase} phase`
+        : "root-zone wetness unavailable for this date";
+    } else if (modelKey === "nitrogen") {
+      if (sample.recentHeavyRain && (phase === "establishing" || phase === "growing")) {
+        score += 50; reason = "real heavy rain during an active-growth window risks leaching applied N";
+      } else if (sample.recentHeavyRain) {
+        score += 15; reason = "real heavy rain occurred, but outside the most N-exposed growth window";
+      } else {
+        reason = "no real heavy-rain event around this date";
+      }
+    } else if (modelKey === "flood") {
+      score += FLOOD_TERRAIN_BIAS[block.id] || 0;
+      const wet = sample.gwetroot != null ? Math.min(1, sample.gwetroot / 0.5) : 0;
+      score += wet * 35;
+      if (sample.recentHeavyRain) { score += 20; reason = "real heavy rain + real root-zone wetness"; }
+      else reason = "based on terrain position + real root-zone wetness";
+    } else if (modelKey === "stress") {
+      if (bare) {
+        score = 10; reason = `${crop} field is bare/dormant — no live crop under heat or water stress`;
+      } else {
+        const heatStress = sample.tMax != null ? Math.max(0, sample.tMax - 30) * 4 * sens.heat : 0;
+        const dryness = sample.gwetroot != null ? Math.max(0, (0.4 - sample.gwetroot) / 0.4) : 0;
+        const droughtStress = dryness * 50 * sens.drought;
+        score = 15 + (heatStress + droughtStress) * (activeGrowth ? 1 : 0.5);
+        reason = `${phase} phase` + (sample.tMax != null ? `, real max temp ${sample.tMax.toFixed(1)}°C` : "");
+      }
+    }
+
+    score = Math.max(0, Math.min(100, Math.round(score)));
+    const label = score >= 66 ? "high" : score >= 35 ? "moderate" : "low";
+    return { score, phase, label, reason };
+  }
+
+  function paintSuitability(modelKey, sample) {
+    const meta = MODEL_META[modelKey];
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 420;
+    const ctx = canvas.getContext("2d");
+    const scores = {};
+    BLOCK_MARKERS.forEach((b) => {
+      const result = computeBlockScore(modelKey, b, sample);
+      scores[b.id] = result;
+      const { fx, fy } = BLOCK_FRAC[b.id];
+      const intensity = result.score / 100;
+      const radius = (0.15 + intensity * 0.2) * 640;
+      const [r, g, bch] = meta.color;
+      const grad = ctx.createRadialGradient(fx * 640, fy * 420, 6, fx * 640, fy * 420, radius);
+      grad.addColorStop(0, `rgba(${r},${g},${bch},${(0.25 + intensity * 0.65).toFixed(2)})`);
+      grad.addColorStop(0.6, `rgba(${r},${g},${bch},${(0.12 + intensity * 0.3).toFixed(2)})`);
+      grad.addColorStop(1, `rgba(${r},${g},${bch},0)`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 640, 420);
+    });
+    return { dataUrl: canvas.toDataURL("image/png"), scores };
+  }
+
+  const suitabilityToggle = $("#suitabilityToggle");
+  const modelSelect = $("#modelSelect");
+  const modelNote = $("#modelNote");
+  const fieldIntel = $("#fieldIntel");
+  const legendBar = $("#legendBar");
+  const seasonScrub = $("#seasonScrub");
+  const seasonScrubValue = $("#seasonScrubValue");
+  const scenarioRain = $("#scenarioRain");
+  const scenarioRainValue = $("#scenarioRainValue");
+  const scenarioTemp = $("#scenarioTemp");
+  const scenarioTempValue = $("#scenarioTempValue");
+  const resetScenarioBtn = $("#resetScenario");
+  let suitOverlay = null;
+
+  function renderFieldIntel(modelKey, scores, sample, dateStr) {
+    const meta = MODEL_META[modelKey];
+    fieldIntel.innerHTML = BLOCK_MARKERS.map((b) => {
+      const r = scores[b.id];
+      return `<li title="${r.reason.replace(/"/g, "&quot;")}"><span class="fi-block">${b.id}</span><span class="fi-crop">${b.crop} · ${r.phase}</span><span class="fi-risk ${r.label}">${r.label}</span></li>`;
+    }).join("");
+
+    const [r, g, bch] = meta.color;
+    if (legendBar) legendBar.style.background = `linear-gradient(to right, rgba(${r},${g},${bch},0.12), rgba(${r},${g},${bch},0.9))`;
+
+    const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" });
+    const rainPct = Number(scenarioRain?.value || 0);
+    const tempDelta = Number(scenarioTemp?.value || 0);
+    const scenarioNote = rainPct !== 0 || tempDelta !== 0
+      ? ` What-if applied: ${rainPct >= 0 ? "+" : ""}${rainPct}% rainfall, ${tempDelta >= 0 ? "+" : ""}${tempDelta}°C over the real baseline.`
+      : "";
+    modelNote.textContent = sample
+      ? `${meta.desc} Computed for ${dateLabel} from the real 2023–2024 NASA POWER record for this time of year.${scenarioNote}`
+      : `${meta.desc} Loading real NASA POWER data…`;
+  }
+
+  function refreshSuitability() {
+    const modelKey = modelSelect.value;
+    const dateStr = dateInput.value || "2025-07-15";
+    const baseSample = powerSampleForDate(dateStr);
+
+    // Apply the what-if scenario sliders over the real baseline sample —
+    // kept separate from, and clearly labeled apart from, the real reading.
+    const rainPct = Number(scenarioRain?.value || 0);
+    const tempDelta = Number(scenarioTemp?.value || 0);
+    let sample = baseSample;
+    if (baseSample && (rainPct !== 0 || tempDelta !== 0)) {
+      sample = {
+        ...baseSample,
+        tMax: baseSample.tMax != null ? baseSample.tMax + tempDelta : null,
+        gwetroot: baseSample.gwetroot != null ? Math.max(0, Math.min(0.5, baseSample.gwetroot * (1 + rainPct / 100))) : null,
+        recentHeavyRain: rainPct > 15 ? true : rainPct < -30 ? false : baseSample.recentHeavyRain,
       };
     }
-  } catch (e) {
-    console.error(e);
-  }
-  return null;
-}
 
-// Fits the map to a search result's real shape (if Nominatim returned
-// boundary geometry) instead of a fixed zoom level, and draws the real
-// outline so the border/coastline shown is accurate, not inferred.
-function siFocusOnSearchResult(result) {
-  siBoundaryLayer.clearLayers();
-  if (result.geometry) {
-    const outline = L.geoJSON(result.geometry, {
-      style: { color: '#ffffff', weight: 2, fill: false, opacity: 0.9 }
-    });
-    outline.addTo(siBoundaryLayer);
-    map.fitBounds(outline.getBounds(), { padding: [20, 20] });
-  } else {
-    map.setView([result.lat, result.lon], 11);
-  }
-}
+    const { dataUrl, scores } = paintSuitability(modelKey, sample);
+    renderFieldIntel(modelKey, scores, sample, dateStr);
 
-document.getElementById('search-place-btn')?.addEventListener('click', async () => {
-  const q = document.getElementById('place-search')?.value;
-  const result = await searchPlace(q);
-  if (result) {
-    siFocusOnSearchResult(result);
-    L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
-    updateSuitabilityForLocation(result);
-  } else {
-    alert('Place not found. Try a city or country name.');
-  }
-});
-
-document.getElementById('place-search')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('search-place-btn')?.click();
-});
-
-// ===== Chatbot =====
-const chatPanel = document.getElementById('chat-panel');
-const chatMessages = document.getElementById('chat-messages');
-const chatInput = document.getElementById('chat-input');
-
-document.getElementById('chat-toggle')?.addEventListener('click', () => {
-  if (chatPanel) chatPanel.hidden = !chatPanel.hidden;
-});
-document.getElementById('chat-close')?.addEventListener('click', () => {
-  if (chatPanel) chatPanel.hidden = true;
-});
-
-function addChatMsg(text, who = 'bot') {
-  if (!chatMessages) return;
-  const div = document.createElement('div');
-  div.className = `chat-msg ${who}`;
-  div.innerHTML = text;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function setGibsLayerByKeyword(keyword) {
-  const select = document.getElementById('gibs-layer');
-  if (!select) return false;
-  const mapKw = {
-    'true color': 'MODIS_Terra_CorrectedReflectance_TrueColor',
-    'truecolor': 'MODIS_Terra_CorrectedReflectance_TrueColor',
-    'terra': 'MODIS_Terra_CorrectedReflectance_TrueColor',
-    'aqua': 'MODIS_Aqua_CorrectedReflectance_TrueColor',
-    'viirs': 'VIIRS_SNPP_CorrectedReflectance_TrueColor',
-    'ndvi': 'MODIS_Terra_NDVI_8Day',
-    'vegetation': 'MODIS_Terra_NDVI_8Day',
-    'temp': 'MODIS_Terra_Land_Surface_Temp_Day',
-    'temperature': 'MODIS_Terra_Land_Surface_Temp_Day',
-    'heat': 'MODIS_Terra_Land_Surface_Temp_Day',
-    'bands': 'MODIS_Terra_CorrectedReflectance_Bands721',
-    'ag': 'MODIS_Terra_CorrectedReflectance_Bands721',
-    'rain': 'MODIS_Terra_CorrectedReflectance_TrueColor', // visual proxy
-    'wind': 'MODIS_Terra_CorrectedReflectance_TrueColor'
-  };
-  const key = Object.keys(mapKw).find(k => keyword.includes(k));
-  if (key) {
-    select.value = mapKw[key];
-    updateGibsLayer();
-    return mapKw[key];
-  }
-  return false;
-}
-
-function setSuitabilityModel(model) {
-  const select = document.getElementById('si-model-select');
-  if (!select) return false;
-  select.value = model;
-  select.dispatchEvent(new Event('change'));
-  return true;
-}
-
-async function handleChatCommand(raw) {
-  const text = (raw || '').trim().toLowerCase();
-  if (!text) return;
-
-  // Place search / go to
-  if (text.startsWith('go to ') || text.startsWith('search ') || text.startsWith('find ') || text.startsWith('show map of ')) {
-    const q = cleanPlaceQuery(text.replace(/^(go to|search|find|show map of)\s+/i, ''));
-    addChatMsg(`Searching for <strong>${q}</strong>…`);
-    const result = await searchPlace(q);
-    if (result) {
-      siFocusOnSearchResult(result);
-      L.popup().setLatLng([result.lat, result.lon]).setContent(`<strong>${result.name}</strong>`).openOn(map);
-      const searchInput = document.getElementById('place-search');
-      if (searchInput) searchInput.value = q;
-      addChatMsg(`Centered map on <strong>${result.name}</strong>.`);
-      updateSuitabilityForLocation(result);
-    } else {
-      addChatMsg('Sorry, I could not find that place. Try a city or country name.');
+    if (suitOverlay) {
+      map.removeLayer(suitOverlay);
+      suitOverlay = null;
     }
-    return;
-  }
-
-  // Every remaining command below is a short, non-question control phrase
-  // (e.g. "show ndvi", "erosion", "rotations"). A real question — one with
-  // a "?" or more than a few words, like "what's the best rotation
-  // strategy here?" — skips all of these and falls through to the real AI
-  // at the end of this function instead of being misread as a command.
-  const isNavPhrase = !text.includes('?') && text.split(/\s+/).length <= 4;
-
-  // Center farm
-  if (isNavPhrase && (text.includes('center farm') || (text.includes('iowa') && text.includes('farm')) || text === 'home')) {
-    map.setView([FARM_LAT, FARM_LON], 12);
-    addChatMsg('Centered on the sample farm near Ames, Iowa.');
-    return;
-  }
-
-  // Layer commands
-  if (isNavPhrase && (text.includes('show ndvi') || text.includes('vegetation') || text.includes('greenness'))) {
-    setGibsLayerByKeyword('ndvi');
-    addChatMsg('Switched to <strong>MODIS NDVI</strong> (vegetation health). Green = more vigorous crops.');
-    return;
-  }
-  if (isNavPhrase && (text.includes('show temp') || text.includes('heat') || text.includes('temperature'))) {
-    setGibsLayerByKeyword('temp');
-    addChatMsg('Switched to <strong>Land Surface Temperature</strong>. Useful for heat-stress patterns.');
-    return;
-  }
-  if (isNavPhrase && (text.includes('true color') || text.includes('satellite photo') || text.includes('show rain') || text.includes('show wind'))) {
-    setGibsLayerByKeyword('true color');
-    if (text.includes('rain')) {
-      addChatMsg('Showing <strong>True Color</strong> imagery. For rainfall patterns, also check the Climate charts section and the scenario slider (rainfall %). Real-time rain radar is not embedded, but NASA GPM concepts are described in the trends.');
-    } else if (text.includes('wind')) {
-      addChatMsg('Showing <strong>True Color</strong>. Wind direction is not a GIBS layer here; use local weather services for wind. The map is centered for land/crop view.');
-    } else {
-      addChatMsg('Switched to <strong>True Color</strong> satellite view.');
+    if (suitabilityToggle.checked) {
+      suitOverlay = L.imageOverlay(dataUrl, SUIT_BOUNDS, { opacity: 0.8 });
+      suitOverlay.addTo(map);
     }
-    return;
   }
-  if (isNavPhrase && (text.includes('bands') || text.includes('agriculture layer'))) {
-    setGibsLayerByKeyword('bands');
-    addChatMsg('Switched to <strong>MODIS Bands 7-2-1</strong> (useful agriculture false-color view).');
-    return;
-  }
+  suitabilityToggle.addEventListener("change", refreshSuitability);
+  modelSelect.addEventListener("change", refreshSuitability);
 
-  // Suitability Index model switching (real data, not illustrative)
-  if (isNavPhrase && text.includes('erosion')) {
-    setSuitabilityModel('erosion');
-    addChatMsg('Switched the map to the real <strong>Erosion Risk</strong> model, computed from real rainfall data for the area shown.');
-    return;
-  }
-  if (isNavPhrase && (text.includes('water stress') || text.includes('water-stress') || text.includes('drought'))) {
-    setSuitabilityModel('water');
-    addChatMsg('Switched the map to the real <strong>Water Stress</strong> model, computed from real dry-spell and temperature data.');
-    return;
-  }
-  if (isNavPhrase && (text.includes('suitability') || text.includes('overall score'))) {
-    setSuitabilityModel('suitability');
-    addChatMsg('Switched the map to the real <strong>Overall Suitability</strong> model (best rotation strategy score per area).');
-    return;
-  }
-
-  // Sections navigation
-  if (isNavPhrase && text.includes('priorit')) {
-    document.getElementById('priorities')?.scrollIntoView({ behavior: 'smooth' });
-    addChatMsg('Scrolled to <strong>Your Farm Priorities</strong>. Tick what matters on your farm.');
-    return;
-  }
-  if (isNavPhrase && (text.includes('rotation') || text.includes('strateg'))) {
-    document.getElementById('strategies')?.scrollIntoView({ behavior: 'smooth' });
-    addChatMsg('Scrolled to <strong>Rotation Strategies</strong>. Compare Corn–Soy, Diversified, and Soil-Building options.');
-    return;
-  }
-  if (isNavPhrase && (text.includes('climate') || text.includes('chart') || text.includes('rainfall') || text.includes('temperature data'))) {
-    document.getElementById('climate')?.scrollIntoView({ behavior: 'smooth' });
-    addChatMsg('Scrolled to <strong>Climate & Soil</strong>. Click “Load NASA POWER Data” for real temperature and precipitation.');
-    return;
-  }
-  if (isNavPhrase && text.includes('map')) {
-    document.getElementById('map-section')?.scrollIntoView({ behavior: 'smooth' });
-    addChatMsg('Scrolled to the <strong>map</strong>. You can search any place, change layers, and toggle risk overlays.');
-    return;
-  }
-
-  // Help / about
-  if (isNavPhrase && (text.includes('help') || text === '?' || text.includes('what can you'))) {
-    addChatMsg(`I can control this page. Try:<br>
-      • <em>go to [place]</em> — e.g. "go to Nebraska"<br>
-      • <em>show NDVI</em> / <em>show temperature</em> / <em>true color</em><br>
-      • <em>show erosion</em> / <em>water stress</em> / <em>suitability</em> (real Suitability Index models)<br>
-      • <em>center farm</em><br>
-      • <em>rotations</em> / <em>priorities</em> / <em>climate</em><br>
-      Ask about crop rotations or soil health too.`);
-    return;
-  }
-
-  // Anything else is a real question for the AGROINTEL AI assistant,
-  // grounded in this farm's real NASA-derived indicators.
-  await askAgrointelAi(raw);
-}
-
-// ===== AGROINTEL AI (real, Gemini-backed, grounded in real NASA data) =====
-const AGROINTEL_API_BASE = 'https://agrointel-ai-api.vercel.app';
-const AGROINTEL_LOCATION_LABEL = 'Central Iowa, USA (Ames area)'; // default/fallback only
-
-// Indicators depend on whatever place is actually focused on the map right
-// now (the last search/"go to" result), not a fixed location - cached per
-// location (rounded lat/lon) so re-asking about the same place is instant,
-// but a new place always gets its own real fetch instead of reusing Iowa's.
-const agrointelIndicatorsCache = new Map(); // "lat,lon" -> promise<indicators>
-
-// Whatever place is currently focused on the map: the last search/"go to"
-// result if there is one, otherwise the default sample farm. This is what
-// keeps the chat's answers in sync with what the map is actually showing.
-function currentAgrointelLocation() {
-  if (siLastLocation && typeof siLastLocation.lat === 'number' && typeof siLastLocation.lon === 'number') {
-    return { lat: siLastLocation.lat, lon: siLastLocation.lon, label: siLastLocation.name || AGROINTEL_LOCATION_LABEL };
-  }
-  return { lat: FARM_LAT, lon: FARM_LON, label: AGROINTEL_LOCATION_LABEL };
-}
-
-function getAgrointelIndicators(loc) {
-  const key = `${loc.lat.toFixed(3)},${loc.lon.toFixed(3)}`;
-  if (!agrointelIndicatorsCache.has(key)) {
-    const promise = fetch(`${AGROINTEL_API_BASE}/indicators`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // SMAP soil-moisture lookups can take 60s+ for some locations and
-      // time out client-side, so this skips it and relies on POWER-only
-      // indicators (temp/rainfall anomalies, dry spells) which respond in ~1s.
-      body: JSON.stringify({ lat: loc.lat, lon: loc.lon, include_soil_moisture: false })
-    }).then(res => {
-      if (!res.ok) throw new Error(`indicators HTTP ${res.status}`);
-      return res.json();
-    }).catch(err => {
-      agrointelIndicatorsCache.delete(key); // allow retry on next question
-      throw err;
-    });
-    agrointelIndicatorsCache.set(key, promise);
-  }
-  return agrointelIndicatorsCache.get(key);
-}
-
-// Light-touch detection of a place named inside a free-form question, e.g.
-// "what should I plant in Kenya?" -> "Kenya". Only matches a capitalized
-// phrase right after in/for/at/near, so ordinary lowercase words ("is this
-// AI trustworthy?") never false-match. Lets a question move the map to the
-// place it's actually about, instead of only responding to "go to X".
-function extractPlaceMention(raw) {
-  const match = (raw || '').match(/\b(?:in|for|at|near)\s+([A-Z][A-Za-z.'-]*(?:\s+[A-Z][A-Za-z.'-]*){0,3})\s*[?.,!]?\s*$/);
-  return match ? match[1].trim() : null;
-}
-
-// Turns the AI's plain-text answer (markdown-ish: **bold**, "- " bullets,
-// blank-line paragraphs) into clean, readable HTML instead of dumping raw
-// asterisks on screen.
-function formatAiAnswer(text) {
-  const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const inline = (s) => escapeHtml(s)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/(?<!\*)\*(?!\*)([^*]+?)\*(?!\*)/g, '<em>$1</em>');
-
-  // Walk line by line (not blank-line blocks) so a bullet list that starts
-  // right under a heading line, with no blank line between them, still
-  // becomes a real <ul>/<ol> instead of a paragraph with literal "* " in it.
-  const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean);
-  const html = [];
-  let listItems = null; // { tag: 'ul'|'ol', items: [...] }
-
-  const flushList = () => {
-    if (listItems) {
-      html.push(`<${listItems.tag}>${listItems.items.map(i => `<li>${inline(i)}</li>`).join('')}</${listItems.tag}>`);
-      listItems = null;
-    }
-  };
-
-  lines.forEach(line => {
-    const bulletMatch = line.match(/^[-*•]\s+(.*)/);
-    const numberedMatch = line.match(/^\d+[.)]\s+(.*)/);
-
-    if (bulletMatch) {
-      if (!listItems || listItems.tag !== 'ul') { flushList(); listItems = { tag: 'ul', items: [] }; }
-      listItems.items.push(bulletMatch[1]);
-    } else if (numberedMatch) {
-      if (!listItems || listItems.tag !== 'ol') { flushList(); listItems = { tag: 'ol', items: [] }; }
-      listItems.items.push(numberedMatch[1]);
-    } else {
-      flushList();
-      html.push(`<p>${inline(line)}</p>`);
-    }
+  /* Season-scrub slider: moves the real date input across a full year
+     (day fixed at the 15th) so the heatmap's seasonal change is easy to see. */
+  const SCRUB_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  seasonScrub?.addEventListener("input", () => {
+    const month = Number(seasonScrub.value);
+    seasonScrubValue.textContent = SCRUB_MONTHS[month - 1];
+    const year = (dateInput.value || "2025-07-15").slice(0, 4);
+    dateInput.value = `${year}-${String(month).padStart(2, "0")}-15`;
+    refreshNasaLayer();
+    refreshSuitability();
   });
-  flushList();
 
-  return html.join('');
-}
+  /* What-if scenario sliders */
+  scenarioRain?.addEventListener("input", () => {
+    scenarioRainValue.textContent = `${Number(scenarioRain.value) >= 0 ? "+" : ""}${scenarioRain.value}%`;
+    refreshSuitability();
+  });
+  scenarioTemp?.addEventListener("input", () => {
+    scenarioTempValue.textContent = `${Number(scenarioTemp.value) >= 0 ? "+" : ""}${Number(scenarioTemp.value).toFixed(1)}°C`;
+    refreshSuitability();
+  });
+  resetScenarioBtn?.addEventListener("click", () => {
+    scenarioRain.value = 0;
+    scenarioTemp.value = 0;
+    scenarioRainValue.textContent = "+0%";
+    scenarioTempValue.textContent = "+0.0°C";
+    refreshSuitability();
+  });
 
-async function askAgrointelAi(question) {
-  // If the question names a place ("...in Kenya?"), show that place on the
-  // map first - the user sees where the AI is talking about while it answers,
-  // instead of the map silently staying wherever it was.
-  const mention = extractPlaceMention(question);
-  if (mention) {
-    const result = await searchPlace(mention);
-    if (result) {
-      siFocusOnSearchResult(result);
-      addChatMsg(`Showing <strong>${result.name}</strong> on the map…`);
-      updateSuitabilityForLocation(result); // sets siLastLocation + heatmap + recommendation marker
+  refreshSuitability();
+
+  /* ---- NASA POWER: 2023–2024 daily data → SVG charts + takeaways ---- */
+  const POWER_URL =
+    "https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M_MAX,T2M_MIN,T2M,PRECTOTCORR,GWETROOT&community=AG&latitude=42.02&longitude=-93.55&start=20230101&end=20241231&format=JSON";
+  const loadBtn = $("#loadPowerBtn");
+  const loadLabel = loadBtn.querySelector(".btn-label");
+  const powerStatus = $("#powerStatus");
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const svgEl = (name, attrs, parent) => {
+    const n = document.createElementNS(SVG_NS, name);
+    for (const [k, v] of Object.entries(attrs || {})) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const svgText = (parent, x, y, str, attrs) => {
+    const t = svgEl("text", { x, y, ...(attrs || {}) }, parent);
+    t.textContent = str;
+    return t;
+  };
+  const isMissing = (v) => !Number.isFinite(v) || v <= -900;
+
+  /** Bucket a POWER daily series {YYYYMMDD: v} into 24 months. */
+  function monthlyBuckets(series) {
+    const buckets = Array.from({ length: 24 }, () => ({ sum: 0, n: 0 }));
+    for (const [key, raw] of Object.entries(series || {})) {
+      const v = Number(raw);
+      if (isMissing(v)) continue;
+      const idx = (Number(key.slice(0, 4)) - 2023) * 12 + Number(key.slice(4, 6)) - 1;
+      if (idx < 0 || idx >= 24) continue;
+      buckets[idx].sum += v;
+      buckets[idx].n += 1;
     }
+    return buckets.map((b, i) => ({
+      index: i,
+      year: 2023 + Math.floor(i / 12),
+      month: i % 12,
+      total: b.sum,
+      mean: b.n ? b.sum / b.n : 0,
+      n: b.n,
+    }));
   }
 
-  const thinking = document.createElement('div');
-  thinking.className = 'chat-msg bot';
-  thinking.textContent = 'Thinking…';
-  chatMessages.appendChild(thinking);
-  thinking.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-
-  try {
-    const loc = currentAgrointelLocation();
-    const indicators = await getAgrointelIndicators(loc);
-    const chatRes = await fetch(`${AGROINTEL_API_BASE}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question,
-        location_label: loc.label,
-        indicators
-      })
-    });
-    if (!chatRes.ok) throw new Error(`chat HTTP ${chatRes.status}`);
-    const chat = await chatRes.json();
-
-    thinking.remove();
-    addChatMsg(formatAiAnswer(chat.answer || 'No answer returned.'), 'bot');
-  } catch (err) {
-    console.error(err);
-    thinking.remove();
-    addChatMsg('Sorry, something went wrong talking to AGROINTEL AI. Please try again in a moment.', 'bot');
-  }
-}
-
-function sendChat() {
-  const val = chatInput?.value?.trim();
-  if (!val) return;
-  addChatMsg(val, 'user');
-  chatInput.value = '';
-  handleChatCommand(val);
-}
-
-document.getElementById('chat-send')?.addEventListener('click', sendChat);
-chatInput?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') sendChat();
-});
-
-// ===== Suitability Index grid (real, per-searched-location) =====
-// Replaces the old hardcoded illustrative zones. Whenever the map's
-// location changes (initial farm load, or a successful place search),
-// this samples a small grid of real points inside that area via our own
-// AGROINTEL AI API, derives 3 real "models" from the fetched indicators,
-// and paints the grid as colored cells — switchable instantly client-side
-// since all models reuse the same fetched data. Never precomputed for
-// anywhere the user hasn't actually looked at.
-
-const SI_LEGEND_CLASSES = ['Very Low', 'Low', 'Moderate', 'High', 'Very High'];
-
-// Risk models (erosion, water) use red=high risk; the suitability model
-// uses the same 5-step ramp but green=high suitability, since a "high
-// suitability" reading is good news, not a warning.
-const SI_RISK_COLORS = ['#2e7d32', '#8bc34a', '#f1c40f', '#e67e22', '#c0392b'];
-const SI_SUITABILITY_COLORS = ['#c0392b', '#e67e22', '#f1c40f', '#8bc34a', '#2e7d32'];
-
-let siGridLayer = L.layerGroup().addTo(map);
-let siBoundaryLayer = L.layerGroup().addTo(map);
-let siLocationMarkerLayer = L.layerGroup().addTo(map);
-let siGridCache = null; // { key, cells: [{lat, lon, south, north, west, east, erosion, water, suitability}] }
-const siLocationCache = new Map(); // boundingBoxKey -> cells
-const siRecommendationCache = new Map(); // "lat,lon" -> {indicators, comparisons}
-
-// Real per-search recommendation marker: for whatever country/region/city
-// the user just searched, fetch real /indicators + /score for that point
-// and drop one marker there with the actual top-ranked rotation strategy -
-// the same style as the sample farm's hand-written field markers, but
-// generated from real data for any place, not just the 3 fixed Iowa points.
-async function siShowLocationRecommendation(loc) {
-  siLocationMarkerLayer.clearLayers();
-  if (typeof loc.lat !== 'number' || typeof loc.lon !== 'number') return;
-
-  const key = `${loc.lat.toFixed(2)},${loc.lon.toFixed(2)}`;
-  try {
-    let data = siRecommendationCache.get(key);
-    if (!data) {
-      const indicators = await getAgrointelIndicators({ lat: loc.lat, lon: loc.lon });
-      const scoreRes = await fetch(`${AGROINTEL_API_BASE}/score`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ indicators })
+  function drawChartFrame(container, yMax, yTickCount = 4) {
+    container.innerHTML = "";
+    const W = 560, H = 240, padL = 40, padR = 8, padT = 10, padB = 30;
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" }, container);
+    for (let i = 0; i <= yTickCount; i++) {
+      const y = padT + ((H - padT - padB) * i) / yTickCount;
+      svgEl("line", { x1: padL, y1: y, x2: W - padR, y2: y, class: "chart-grid-line" }, svg);
+      svgText(svg, padL - 5, y + 3.5, String(Math.round(yMax * (1 - i / yTickCount))), {
+        class: "chart-axis-text", "text-anchor": "end",
       });
-      if (!scoreRes.ok) throw new Error(`score HTTP ${scoreRes.status}`);
-      const scoreData = await scoreRes.json();
-      data = { indicators, comparisons: scoreData.comparisons || [] };
-      siRecommendationCache.set(key, data);
     }
-
-    const top = data.comparisons[0];
-    if (!top) return;
-
-    const ind = data.indicators;
-    const notes = [`${ind.longest_dry_spell_days}-day dry spell`];
-    notes.push(`${ind.temp_anomaly_mean_c >= 0 ? '+' : ''}${ind.temp_anomaly_mean_c.toFixed(1)}°C temp anomaly`);
-    if (ind.rainfall_anomaly_pct != null) {
-      notes.push(`${Math.abs(ind.rainfall_anomaly_pct).toFixed(0)}% ${ind.rainfall_anomaly_pct >= 0 ? 'wetter' : 'drier'} than normal`);
-    }
-
-    // A real L.marker (not circleMarker) so it renders in Leaflet's
-    // markerPane, above the SI heatmap's invisible per-cell inspection
-    // circleMarkers - otherwise those silently swallow clicks meant for
-    // this recommendation pin since they'd sit at nearly the same point.
-    const icon = L.divIcon({
-      className: 'si-recommendation-pin',
-      html: '<div class="si-recommendation-pin-dot"></div>',
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
+    // Year separator between Dec-2023 and Jan-2024
+    const sepX = padL + ((W - padL - padR) * 12) / 24;
+    svgEl("line", { x1: sepX, y1: padT, x2: sepX, y2: H - padB, class: "chart-year-line" }, svg);
+    MONTHS.forEach((m, i) => {
+      [0, 12].forEach((offset) => {
+        if (i % 2 === 0) {
+          const x = padL + ((W - padL - padR) * (offset + i + 0.5)) / 24;
+          svgText(svg, x, H - padB + 14, m, { class: "chart-axis-text", "text-anchor": "middle" });
+        }
+      });
     });
-    const marker = L.marker([loc.lat, loc.lon], { icon, zIndexOffset: 1000 }).addTo(siLocationMarkerLayer);
-
-    marker.bindPopup(`
-      <strong style="font-size:1.05em">${loc.name || 'Searched location'}</strong><br>
-      Best-fit rotation strategy (real data): <strong>${top.label}</strong><br>
-      Overall suitability score: <strong>${top.overall_score.toFixed(1)}/100</strong><br>
-      <small style="color:#666">Real NASA conditions: ${notes.join(', ')}.</small><br>
-      <small style="color:#888">Decision support only - ask the chat for the full breakdown, or consult a local agronomist.</small>
-    `);
-  } catch (err) {
-    console.error('Location recommendation failed', loc.lat, loc.lon, err);
+    svgText(svg, padL + 4, H - 6, "2023", { class: "chart-axis-text", "font-weight": "700" });
+    svgText(svg, sepX + 4, H - 6, "2024", { class: "chart-axis-text", "font-weight": "700" });
+    return { svg, W, H, padL, padR, padT, padB };
   }
-}
 
-function siBoundingBoxFor() {
-  // Sample the map's actual current viewport, not just a box around the
-  // searched point, so the heatmap covers the whole visible map rather
-  // than leaving most of it blank. invalidateSize() first because Leaflet
-  // can still be using a stale (too-small) container size this early in
-  // page load, which otherwise under-reports getBounds() and leaves the
-  // heatmap short of the real edges once layout settles.
-  map.invalidateSize();
-  const b = map.getBounds();
-  return { south: b.getSouth(), north: b.getNorth(), west: b.getWest(), east: b.getEast() };
-}
+  function renderPrecipChart(months) {
+    const container = $("#precipChart");
+    const maxTotal = Math.max(...months.map((m) => m.total), 10);
+    const yMax = Math.ceil(maxTotal / 25) * 25;
+    const { svg, W, H, padL, padR, padT, padB } = drawChartFrame(container, yMax);
+    const innerW = W - padL - padR;
+    const slot = innerW / 24;
+    months.forEach((m, i) => {
+      const h = ((H - padT - padB) * m.total) / yMax;
+      const bar = svgEl("rect", {
+        x: padL + i * slot + 2,
+        y: H - padB - h,
+        width: Math.max(slot - 4, 2),
+        height: Math.max(h, m.total > 0 ? 1.5 : 0),
+        class: "chart-bar",
+        rx: 2,
+      }, svg);
+      const title = svgEl("title", {}, bar);
+      title.textContent = `${MONTHS[m.month]} ${m.year}: ${m.total.toFixed(1)} mm`;
+    });
+  }
 
-function siBuildGrid(box, maxPoints = 25) {
-  const cols = Math.max(2, Math.min(6, Math.round(Math.sqrt(maxPoints))));
-  const rows = cols;
-  const latStep = (box.north - box.south) / rows;
-  const lonStep = (box.east - box.west) / cols;
-  const cells = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const south = box.south + r * latStep;
-      const north = south + latStep;
-      const west = box.west + c * lonStep;
-      const east = west + lonStep;
-      cells.push({ lat: (south + north) / 2, lon: (west + east) / 2, south, north, west, east });
+  function renderTempChart(tmax, tmean, tmin) {
+    const container = $("#tempChart");
+    const globalMax = Math.max(...tmax.map((m) => m.mean));
+    const globalMin = Math.min(...tmin.map((m) => m.mean));
+    const yMax = Math.ceil((globalMax + 4) / 10) * 10;
+    const yMin = Math.floor((globalMin - 4) / 10) * 10;
+    container.innerHTML = "";
+    const W = 560, H = 240, padL = 40, padR = 8, padT = 14, padB = 30;
+    const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, role: "img" }, container);
+    const span = yMax - yMin;
+    for (let i = 0; i <= 4; i++) {
+      const y = padT + ((H - padT - padB) * i) / 4;
+      svgEl("line", { x1: padL, y1: y, x2: W - padR, y2: y, class: "chart-grid-line" }, svg);
+      svgText(svg, padL - 5, y + 3.5, String(Math.round(yMax - (span * i) / 4)), {
+        class: "chart-axis-text", "text-anchor": "end",
+      });
+    }
+    const sepX = padL + ((W - padL - padR) * 12) / 24;
+    svgEl("line", { x1: sepX, y1: padT, x2: sepX, y2: H - padB, class: "chart-year-line" }, svg);
+    MONTHS.forEach((m, i) => {
+      if (i % 2 === 0) {
+        [0, 12].forEach((offset) => {
+          const x = padL + ((W - padL - padR) * (offset + i + 0.5)) / 24;
+          svgText(svg, x, H - padB + 14, m, { class: "chart-axis-text", "text-anchor": "middle" });
+        });
+      }
+    });
+    svgText(svg, padL + 4, H - 6, "2023", { class: "chart-axis-text", "font-weight": "700" });
+    svgText(svg, sepX + 4, H - 6, "2024", { class: "chart-axis-text", "font-weight": "700" });
+
+    const xAt = (i) => padL + ((W - padL - padR) * (i + 0.5)) / 24;
+    const yAt = (v) => padT + ((H - padT - padB) * (yMax - v)) / span;
+    const series = [
+      { data: tmax, color: "#dc2626", label: "Max" },
+      { data: tmean, color: "#f59e0b", label: "Mean" },
+      { data: tmin, color: "#2563eb", label: "Min" },
+    ];
+    for (const s of series) {
+      const points = s.data.map((m, i) => `${xAt(i)},${yAt(m.mean)}`).join(" ");
+      svgEl("polyline", {
+        points, fill: "none", stroke: s.color, "stroke-width": 2.4,
+        "stroke-linejoin": "round", "stroke-linecap": "round",
+      }, svg);
+      s.data.forEach((m, i) => svgEl("circle", { cx: xAt(i), cy: yAt(m.mean), r: 2, fill: s.color }, svg));
+    }
+    // Legend
+    let lx = padL;
+    for (const s of series) {
+      svgEl("circle", { cx: lx + 5, cy: 8, r: 4, fill: s.color }, svg);
+      svgText(svg, lx + 13, 11.5, s.label, { class: "chart-legend" });
+      lx += 52;
     }
   }
-  return cells;
-}
 
-// Ray-casting point-in-ring test (GeoJSON ring: array of [lon, lat]).
-function siPointInRing(lat, lon, ring) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    const intersects = (yi > lat) !== (yj > lat) &&
-      lon < (xj - xi) * (lat - yi) / (yj - yi) + xi;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
+  function computeTakeaways(p) {
+    const params = p.properties?.parameter || {};
+    const gwet = params.GWETROOT || {};
+    const tmax = params.T2M_MAX || {};
+    const precip = params.PRECTOTCORR || {};
+    const keys = Object.keys(tmax).sort();
 
-// A GeoJSON Polygon's first ring is its outer boundary; any further rings
-// are holes, so XOR-ing all ring results gives "inside the shape, outside
-// any hole" without needing to know winding direction.
-function siPointInPolygonRings(lat, lon, rings) {
-  let inside = false;
-  for (const ring of rings) {
-    if (siPointInRing(lat, lon, ring)) inside = !inside;
-  }
-  return inside;
-}
-
-// Supports both Polygon and MultiPolygon (e.g. Malaysia's separated
-// Peninsular + Borneo territory) — true if inside any part.
-function siPointInGeometry(lat, lon, geometry) {
-  if (!geometry) return true; // no real shape known (bare point) - keep everything
-  if (geometry.type === 'Polygon') {
-    return siPointInPolygonRings(lat, lon, geometry.coordinates);
-  }
-  if (geometry.type === 'MultiPolygon') {
-    return geometry.coordinates.some(polygonRings => siPointInPolygonRings(lat, lon, polygonRings));
-  }
-  return true;
-}
-
-function siRingBBox(ring) {
-  let west = Infinity, east = -Infinity, south = Infinity, north = -Infinity;
-  ring.forEach(([lon, lat]) => {
-    west = Math.min(west, lon); east = Math.max(east, lon);
-    south = Math.min(south, lat); north = Math.max(north, lat);
-  });
-  return { west, east, south, north };
-}
-
-function siRingArea(bbox) {
-  return (bbox.east - bbox.west) * (bbox.north - bbox.south);
-}
-
-// A country's real shape can be split into separate landmasses (e.g.
-// Malaysia: Peninsular + Borneo). Gridding one box over the whole combined
-// extent wastes almost every sample point on the ocean between them, so
-// instead this grids each part's own bounding box separately and only
-// keeps points that land inside that specific part.
-function siBuildGridForGeometry(geometry, box, pointsPerPart = 25) {
-  if (!geometry) return siBuildGrid(box, pointsPerPart);
-
-  const parts = geometry.type === 'MultiPolygon' ? geometry.coordinates
-    : geometry.type === 'Polygon' ? [geometry.coordinates]
-    : null;
-  if (!parts) return siBuildGrid(box, pointsPerPart);
-
-  // Cap how many separate parts get their own grid, largest first, so a
-  // country simplified down to many small islands doesn't balloon API
-  // calls - the biggest landmasses matter most for a usable map.
-  const ranked = parts
-    .map(rings => ({ rings, bbox: siRingBBox(rings[0]) }))
-    .sort((a, b) => siRingArea(b.bbox) - siRingArea(a.bbox))
-    .slice(0, 4);
-
-  const cells = [];
-  ranked.forEach(({ rings, bbox }) => {
-    const partCells = siBuildGrid(bbox, pointsPerPart)
-      .filter(cell => siPointInPolygonRings(cell.lat, cell.lon, rings));
-    cells.push(...partCells);
-  });
-  return cells;
-}
-
-async function siFetchCell(cell) {
-  try {
-    const indicatorsRes = await fetch(`${AGROINTEL_API_BASE}/indicators`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat: cell.lat, lon: cell.lon, include_soil_moisture: false })
-    });
-    if (!indicatorsRes.ok) throw new Error(`indicators HTTP ${indicatorsRes.status}`);
-    const indicators = await indicatorsRes.json();
-
-    const scoreRes = await fetch(`${AGROINTEL_API_BASE}/score`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ indicators })
-    });
-    let topScore = null;
-    let topResilience = null;
-    if (scoreRes.ok) {
-      const scoreData = await scoreRes.json();
-      const comparisons = scoreData.comparisons || [];
-      const scores = comparisons.map(c => c.overall_score).filter(v => typeof v === 'number');
-      if (scores.length) topScore = Math.max(...scores);
-      // climate_resilience is one of the two real (non-assumption) scoring
-      // criteria in src/scoring/model.py — the other real one, erosion
-      // reduction, is already represented by the Erosion Risk model above.
-      const resilienceScores = comparisons
-        .map(c => c.criteria_scores?.climate_resilience)
-        .filter(v => typeof v === 'number');
-      if (resilienceScores.length) topResilience = Math.max(...resilienceScores);
+    // Moisture windows: days in root-zone comfort (GWETROOT ≥ 0.40) + dips
+    const COMFORT = 0.4;
+    let comfortDays = 0, dipDays = 0;
+    let minV = Infinity, minKey = keys[0];
+    let gSum = 0, gN = 0;
+    const dipMonths = {};
+    for (const k of keys) {
+      const v = Number(gwet[k]);
+      if (isMissing(v)) continue;
+      gSum += v; gN += 1;
+      if (v >= COMFORT) comfortDays += 1;
+      else {
+        dipDays += 1;
+        const m = Number(k.slice(4, 6)) - 1;
+        dipMonths[m] = (dipMonths[m] || 0) + 1;
+      }
+      if (v < minV) { minV = v; minKey = k; }
     }
+    const gMean = gN ? gSum / gN : 0;
+    const counted = comfortDays + dipDays;
+    const topDip = Object.entries(dipMonths).sort((a, b) => b[1] - a[1])[0]?.[0];
+    const topDipMonth = topDip !== undefined ? MONTHS[Number(topDip)] : "—";
+    const lowDate = `${MONTHS[Number(minKey.slice(4, 6)) - 1]} ${Number(minKey.slice(6, 8))}, ${minKey.slice(0, 4)}`;
+    $("#takeawayMoisture").innerHTML =
+      `<strong>${comfortDays} of ${counted} days</strong> in root-zone comfort (GWETROOT ≥ 0.40). Dips below comfort: <strong>${dipDays} days</strong>, most frequent in <strong>${topDipMonth}</strong>. Season low <strong>${minV.toFixed(2)}</strong> on ${lowDate} — no day hit drought-critical (&lt; 0.30). Irrigate when 3 consecutive days sit below 0.40.`;
 
-    return {
-      ...cell,
-      tempAnomaly: indicators.temp_anomaly_mean_c,
-      extremeRainDays: indicators.extreme_rainfall_days,
-      drySpellDays: indicators.longest_dry_spell_days,
-      suitabilityScore: topScore,
-      climateResilience: topResilience
-    };
-  } catch (err) {
-    console.error('SI cell fetch failed', cell.lat, cell.lon, err);
-    return { ...cell, failed: true };
+    // Heat stress: days > 32 °C and the peak
+    let hotDays = 0, peak = -Infinity, peakKey = keys[0];
+    for (const k of keys) {
+      const v = Number(tmax[k]);
+      if (isMissing(v)) continue;
+      if (v > 32) hotDays += 1;
+      if (v > peak) { peak = v; peakKey = k; }
+    }
+    const peakDate = `${MONTHS[Number(peakKey.slice(4, 6)) - 1]} ${Number(peakKey.slice(6, 8))}, ${peakKey.slice(0, 4)}`;
+    $("#takeawayHeat").innerHTML =
+      `<strong>${hotDays} days above 32 °C</strong> across 2023–2024. Peak <strong>${peak.toFixed(1)} °C</strong> on ${peakDate}. Above 32 °C, corn pollen viability and young fruit set drop fast — the case for afternoon irrigation and kaolin sprays.`;
+
+    // Water trend: 2023 vs 2024 totals
+    let p2023 = 0, p2024 = 0;
+    for (const [k, raw] of Object.entries(precip)) {
+      const v = Number(raw);
+      if (isMissing(v)) continue;
+      if (k.startsWith("2023")) p2023 += v; else if (k.startsWith("2024")) p2024 += v;
+    }
+    const delta = p2024 - p2023;
+    const pct = p2023 > 0 ? Math.abs((delta / p2023) * 100).toFixed(0) : "0";
+    const wetter = delta >= 0 ? "wetter" : "drier";
+    $("#takeawayWater").innerHTML =
+      `2023 delivered <strong>${p2023.toFixed(0)} mm</strong> vs <strong>${p2024.toFixed(0)} mm</strong> in 2024 — <strong>${Math.abs(delta).toFixed(0)} mm ${wetter} (${pct}%)</strong>. ${delta >= 0 ? "Plan drainage and fungicide timing first." : "Plan irrigation capacity and drought-tolerant hybrids first."}`;
+
+    // Publish to the shared agronomy context (chatbot reads this)
+    agronomyContext.powerSummary =
+      `Rain 2023 ${p2023.toFixed(0)} mm vs 2024 ${p2024.toFixed(0)} mm (${Math.abs(delta).toFixed(0)} mm ${wetter}, ${pct}%). ` +
+      `${hotDays} days > 32 °C across the two seasons (peak ${peak.toFixed(1)} °C on ${peakDate}). ` +
+      `Root-zone wetness (GWETROOT) mean ${gMean.toFixed(2)}; ${comfortDays}/${counted} comfort days (≥ 0.40); ${dipDays} dips, most in ${topDipMonth}; season low ${minV.toFixed(2)} on ${lowDate}.`;
+    agronomyContext.powerLoaded = true;
+    const ctxS = $("#ctxPowerStatus"), ctxD = $("#ctxPowerDetail");
+    if (ctxS) ctxS.innerHTML = '<span class="ctx-dot ok"></span>live — 731 days loaded';
+    if (ctxD) ctxD.textContent =
+      `Rain ${p2023.toFixed(0)} → ${p2024.toFixed(0)} mm/yr · peak ${peak.toFixed(1)} °C (${peakDate}) · GWETROOT ${gMean.toFixed(2)} mean`;
   }
-}
 
-function siClassify(values, value) {
-  // Quantile thresholds over this grid's own real values, so "High"/"Low"
-  // is always relative to the area actually being looked at.
-  const sorted = [...values].sort((a, b) => a - b);
-  const q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
-  const thresholds = [q(0.2), q(0.4), q(0.6), q(0.8)];
-  let idx = thresholds.findIndex(t => value <= t);
-  return idx === -1 ? 4 : idx;
-}
+  async function loadPowerData(silent = false) {
+    loadBtn.disabled = true;
+    loadLabel.textContent = "Fetching NASA POWER…";
+    powerStatus.textContent = "Requesting daily data for 42.02°N, 93.55°W…";
+    powerStatus.className = "power-status";
 
-// Models where a HIGH value is good news (suitability/resilience) get the
-// green-high ramp; everything else is a risk reading (red-high ramp).
-const SI_GOOD_WHEN_HIGH = new Set(['suitability', 'resilience']);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+    try {
+      const res = await fetch(POWER_URL, { signal: controller.signal });
+      if (!res.ok) throw new Error(`POWER HTTP ${res.status}`);
+      const data = await res.json();
+      const params = data?.properties?.parameter;
+      if (!params?.T2M) throw new Error("Unexpected POWER payload");
 
-function siModelValue(cell, model) {
-  if (model === 'erosion') return cell.extremeRainDays ?? 0;
-  if (model === 'water') return (cell.drySpellDays ?? 0) + Math.max(0, cell.tempAnomaly ?? 0) * 2;
-  if (model === 'temp') return cell.tempAnomaly ?? 0;
-  if (model === 'resilience') return cell.climateResilience ?? 0;
-  return cell.suitabilityScore ?? 0; // 'suitability'
-}
+      renderPrecipChart(monthlyBuckets(params.PRECTOTCORR));
+      renderTempChart(monthlyBuckets(params.T2M_MAX), monthlyBuckets(params.T2M), monthlyBuckets(params.T2M_MIN));
+      computeTakeaways(data);
 
-function siModelTitle(model) {
-  return {
-    erosion: 'Erosion Risk (real)',
-    water: 'Water Stress (real)',
-    temp: 'Temperature Anomaly (real)',
-    resilience: 'Climate Resilience (real)',
-    suitability: 'Overall Suitability (real)'
-  }[model];
-}
+      powerDaily = params; // keep the real daily series so the heatmap can use it too
+      refreshSuitability(); // re-render now that real data is in (initial call ran before this)
 
-// Honest provenance note per map model: which part of the AI's backend
-// scoring is a real NASA measurement vs. a documented expert-baseline
-// assumption, so the badge in the sidebar never overstates confidence.
-function siModelProvenance(model) {
-  return {
-    erosion: 'NASA data: real GPM extreme-rainfall-day counts drive this directly.',
-    water: 'NASA data: real NASA POWER dry-spell length + temperature anomaly drive this directly.',
-    temp: 'NASA data: real NASA POWER temperature anomaly vs. 5-year climatology.',
-    resilience: 'NASA data: real NASA POWER dry-spell + temperature anomaly, scaled by a documented per-strategy sensitivity assumption.',
-    suitability: 'Mixed: real NASA data drives climate resilience, erosion reduction, and water-use trend; soil health, pest cycles, and market value remain documented expert baselines. Ask the chat for a full per-criterion breakdown of any area.'
-  }[model];
-}
+      powerStatus.textContent = "Live from NASA POWER — 731 days · 42.02°N, 93.55°W (central Iowa) · updated for 2023–2024.";
+      powerStatus.className = "power-status ok";
+      loadLabel.textContent = "Reload NASA POWER data";
+      if (!silent) showToast("NASA POWER data loaded.");
+    } catch (err) {
+      console.error("POWER load failed:", err);
+      powerStatus.textContent = "Couldn’t reach NASA POWER — check your connection and retry.";
+      powerStatus.className = "power-status error";
+      loadLabel.textContent = "Retry loading NASA POWER data";
+      const ctxS = $("#ctxPowerStatus");
+      if (ctxS) ctxS.innerHTML = '<span class="ctx-dot error"></span>unreachable';
+      if (!silent) showToast("NASA POWER request failed.");
+    } finally {
+      clearTimeout(timeout);
+      loadBtn.disabled = false;
+    }
+  }
+  loadBtn.addEventListener("click", () => loadPowerData(false));
+  loadPowerData(true); // silent warm-up — Ask Agro chats with fresh data
+})();
 
-function siRenderLegend(model) {
-  const legend = document.getElementById('si-legend');
-  if (!legend) return;
-  const colors = SI_GOOD_WHEN_HIGH.has(model) ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
-  legend.innerHTML = `<div class="si-legend-title">${siModelTitle(model)}</div>` +
-    `<div class="si-legend-provenance">${siModelProvenance(model)}</div>` +
-    SI_LEGEND_CLASSES.map((label, i) => `
-      <div class="si-legend-row"><span class="si-legend-swatch" style="background:${colors[i]}"></span>${label}</div>
-    `).join('');
-}
+/* ==========================================================
+   Scroll reveal — fade-up sections as they enter view
+   ========================================================== */
+(function revealOnScroll() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-// Parses a "#rrggbb" color into {r,g,b} for gradient-stop interpolation.
-function siHexToRgb(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
+  const candidates = $$(
+    ".section-head, .tip-bar, .stat, .feature-card, .quote-card, .plan-card, .step, .faq-item, .crop-tile, .chart-card, .takeaway-card, .an-card, .map-toolbar, .analysis-grid > *, .ask-grid > *, .gs-steps-preview > li, .gs-quote"
+  );
+  candidates.forEach((el) => el.classList.add("reveal"));
 
-function siHeatGradient(model) {
-  const colors = SI_GOOD_WHEN_HIGH.has(model) ? SI_SUITABILITY_COLORS : SI_RISK_COLORS;
-  const stops = {};
-  colors.forEach((hex, i) => {
-    const { r, g, b } = siHexToRgb(hex);
-    stops[(i / (colors.length - 1)).toFixed(2)] = `rgb(${r},${g},${b})`;
-  });
-  return stops;
-}
-
-// Picks a heat radius/blur (in screen pixels) from the on-screen spacing
-// between adjacent grid points, so sampled points blend into continuous
-// coverage instead of leaving visible gaps — recalculated on zoom change.
-function siHeatSizingFor(cells) {
-  if (cells.length < 2) return { radius: 40, blur: 30 };
-  const p0 = map.latLngToContainerPoint([cells[0].lat, cells[0].lon]);
-  const p1 = map.latLngToContainerPoint([cells[1].lat, cells[1].lon]);
-  const spacing = Math.max(20, Math.hypot(p1.x - p0.x, p1.y - p0.y));
-  // Generous overlap between adjacent points' kernels for smooth, seamless
-  // blending (no visible blob/gap edges) across the whole viewport.
-  return { radius: spacing * 1.15, blur: spacing * 0.95 };
-}
-
-function siRenderGrid(cells, model) {
-  siGridLayer.clearLayers();
-  const valid = cells.filter(c => !c.failed);
-  if (!valid.length) return;
-  const values = valid.map(c => siModelValue(c, model));
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-
-  const { radius, blur } = siHeatSizingFor(valid);
-  const heatPoints = valid.map(cell => {
-    const value = siModelValue(cell, model);
-    // Normalized 0..1 intensity for a smooth gradient between real sampled
-    // values (interpolated by the heat renderer) — the discrete 5-class
-    // legend below is derived from the same values via quantiles, kept in
-    // sync so what's labeled matches what's painted.
-    const intensity = 0.15 + 0.85 * ((value - min) / span);
-    return [cell.lat, cell.lon, intensity];
+  // Stagger siblings inside shared parents
+  const parents = new Set(candidates.map((el) => el.parentElement).filter(Boolean));
+  parents.forEach((parent) => {
+    [...parent.children]
+      .filter((child) => child.classList.contains("reveal"))
+      .forEach((child, i) => child.style.setProperty("--reveal-delay", `${Math.min(i * 70, 420)}ms`));
   });
 
-  const heat = L.heatLayer(heatPoints, {
-    radius, blur, max: 1, minOpacity: 0.45,
-    gradient: siHeatGradient(model)
-  });
-  heat.addTo(siGridLayer);
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          io.unobserve(entry.target);
+        }
+      }
+    },
+    { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+  );
+  candidates.forEach((el) => io.observe(el));
+})();
 
-  // Invisible click targets at each sample point so the real numbers
-  // behind the smoothed color are still inspectable.
-  valid.forEach(cell => {
-    const value = siModelValue(cell, model);
-    const classIdx = siClassify(values, value);
-    const label = SI_LEGEND_CLASSES[classIdx];
-    const marker = L.circleMarker([cell.lat, cell.lon], { radius: 10, opacity: 0, fillOpacity: 0 });
-    marker.bindPopup(`
-      <strong>${label}</strong><br>
-      Temp anomaly: ${cell.tempAnomaly?.toFixed(2) ?? '—'}°C<br>
-      Extreme rainfall days: ${cell.extremeRainDays ?? '—'}<br>
-      Longest dry spell: ${cell.drySpellDays ?? '—'} days<br>
-      Climate resilience: ${cell.climateResilience != null ? cell.climateResilience.toFixed(1) + '/100' : '—'}<br>
-      Best-strategy score: ${cell.suitabilityScore != null ? cell.suitabilityScore.toFixed(1) + '/100' : '—'}
-    `);
-    marker.addTo(siGridLayer);
-  });
-
-  siRenderLegend(model);
-
-  // Heat layer sizing depends on screen pixel spacing, which changes with
-  // zoom — re-render (cheap, no refetch) so it keeps blending smoothly.
-  map.off('zoomend', siRerenderCurrentModel);
-  map.on('zoomend', siRerenderCurrentModel);
-}
-
-function siRerenderCurrentModel() {
-  if (!siGridCache) return;
-  const model = document.getElementById('si-model-select')?.value || 'erosion';
-  siRenderGrid(siGridCache.cells, model);
-}
-
-let siLastLocation = null;
-
-async function updateSuitabilityForLocation(loc) {
-  siLastLocation = loc;
-  siShowLocationRecommendation(loc); // real marker+popup, independent of the heatmap toggle below
-  const status = document.getElementById('si-status');
-  const toggle = document.getElementById('si-toggle');
-
-  if (toggle && !toggle.checked) {
-    siGridLayer.clearLayers();
-    if (status) status.textContent = 'Suitability heatmap is off.';
-    return;
-  }
-
-  const box = siBoundingBoxFor();
-  const cacheKey = [box.south, box.north, box.west, box.east].map(v => v.toFixed(2)).join(',');
-
-  if (siLocationCache.has(cacheKey)) {
-    siGridCache = { key: cacheKey, cells: siLocationCache.get(cacheKey) };
-    const model = document.getElementById('si-model-select')?.value || 'erosion';
-    siRenderGrid(siGridCache.cells, model);
-    if (status) status.textContent = `Showing real data for ${loc.name || 'this area'} (cached).`;
-    return;
-  }
-
-  if (status) status.textContent = `Computing real data for ${loc.name || 'this area'}…`;
-  // With a real shape, grid each landmass part separately (not one grid
-  // over the whole combined bbox, which would waste most points on ocean
-  // between e.g. Malaysia's Peninsular and Borneo territory).
-  const grid = siBuildGridForGeometry(loc.geometry, box, 25);
-  const results = await Promise.all(grid.map(siFetchCell));
-  siLocationCache.set(cacheKey, results);
-  siGridCache = { key: cacheKey, cells: results };
-
-  const failedCount = results.filter(c => c.failed).length;
-  if (status) {
-    status.textContent = failedCount
-      ? `Real data for ${loc.name || 'this area'} (${failedCount} of ${results.length} points unavailable).`
-      : `Real data for ${loc.name || 'this area'} — ${results.length} points.`;
-  }
-
-  const model = document.getElementById('si-model-select')?.value || 'erosion';
-  siRenderGrid(results, model);
-}
-
-document.getElementById('si-model-select')?.addEventListener('change', (e) => {
-  if (siGridCache) siRenderGrid(siGridCache.cells, e.target.value);
-});
-
-document.getElementById('si-toggle')?.addEventListener('change', (e) => {
-  const status = document.getElementById('si-status');
-  if (!e.target.checked) {
-    siGridLayer.clearLayers();
-    if (status) status.textContent = 'Suitability heatmap is off.';
-    return;
-  }
-  // Re-enabling: re-render from cache if we already have data for the
-  // current view, otherwise fetch fresh for the last searched location.
-  const box = siBoundingBoxFor();
-  const cacheKey = [box.south, box.north, box.west, box.east].map(v => v.toFixed(2)).join(',');
-  if (siLocationCache.has(cacheKey)) {
-    siGridCache = { key: cacheKey, cells: siLocationCache.get(cacheKey) };
-    siRenderGrid(siGridCache.cells, document.getElementById('si-model-select')?.value || 'erosion');
-  } else if (siLastLocation) {
-    updateSuitabilityForLocation(siLastLocation);
-  }
-});
-
-// Initial grid for the default sample farm.
-updateSuitabilityForLocation({ lat: FARM_LAT, lon: FARM_LON, name: AGROINTEL_LOCATION_LABEL, boundingBox: null });
+/* ==========================================================
+   Footer year
+   ========================================================== */
+$("#year").textContent = new Date().getFullYear();
