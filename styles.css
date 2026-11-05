@@ -1864,6 +1864,7 @@ body {
   box-shadow: var(--shadow-md);
   overflow: hidden;
   min-height: 560px;
+  max-height: 560px; /* fixed card height - messages scroll inside it, the card itself never grows */
 }
 .ask-chat-header { background: linear-gradient(180deg, #f2f5ec, #eef1e6); }
 .model-badge {
@@ -1881,8 +1882,7 @@ body {
 }
 .ask-messages {
   flex: 1;
-  max-height: none;
-  min-height: 380px;
+  min-height: 0; /* lets flex:1 actually shrink to the fixed card height instead of forcing growth */
   padding: 1.1rem;
 }
 .ask-messages .message { max-width: 92%; }
