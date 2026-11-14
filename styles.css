@@ -933,8 +933,10 @@ body {
 #chatInput:focus, #askInput:focus {
   border-color: var(--green-700);
   box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15);
-  background: #fff;
+  background: var(--surface-2);
+  color: var(--ink);
 }
+#chatInput::placeholder, #askInput::placeholder { color: var(--muted, var(--ink-soft, #7a8a82)); opacity: 0.85; }
 .send-btn {
   width: 46px; height: 46px;
   border: 0; border-radius: 12px;
