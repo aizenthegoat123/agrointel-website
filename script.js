@@ -164,11 +164,11 @@ cropFilters.forEach((btn) => {
 
   const FARM = { lat: 42.021, lon: -93.55, zoom: 12, name: "GreenHarvest North · Central Iowa" };
   const BLOCK_MARKERS = [
-    { id: "A", crop: "Tomato", ndvi: "0.62", note: "Early blight — action required", pos: [41.986, -93.586] },
-    { id: "B", crop: "Wheat",  ndvi: "0.78", note: "Vigorous, on track",             pos: [42.046, -93.588] },
-    { id: "C", crop: "Cotton", ndvi: "0.66", note: "Aphid risk: moderate",           pos: [42.046, -93.493] },
-    { id: "D", crop: "Grapes", ndvi: "0.83", note: "Excellent vigor",                pos: [41.997, -93.475] },
-    { id: "E", crop: "Paddy",  ndvi: "0.81", note: "Standing water 4 cm",            pos: [41.963, -93.502] },
+    { id: "A", crop: "Tomato", pos: [41.986, -93.586] },
+    { id: "B", crop: "Wheat", pos: [42.046, -93.588] },
+    { id: "C", crop: "Cotton", pos: [42.046, -93.493] },
+    { id: "D", crop: "Grapes", pos: [41.997, -93.475] },
+    { id: "E", crop: "Paddy", pos: [41.963, -93.502] },
   ];
 
   const esriSatellite = L.tileLayer(
@@ -209,7 +209,7 @@ cropFilters.forEach((btn) => {
 
   const farmIcon = L.divIcon({ className: "", html: '<div class="farm-marker"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
   let homeFarmMarker = L.marker([FARM.lat, FARM.lon], { icon: farmIcon, title: FARM.name })
-    .bindPopup(`<strong>${FARM.name}</strong><br>5 blocks · 214 ha · pairs Sentinel-2 with MODIS.<br>Click a block marker for field intel.`)
+    .bindPopup(`<strong>${FARM.name}</strong><br>Illustrative sample farm with 5 crop blocks.<br>Click a lettered marker or any coloured zone to see why it scored that way.`)
     .addTo(map);
 
   // Which place the suitability heatmap/block markers below are currently
@@ -219,15 +219,21 @@ cropFilters.forEach((btn) => {
   let activeSuitBounds = null; // set once SUIT_BOUNDS is declared below
 
   const blockMarkerLayer = L.layerGroup().addTo(map);
-  function renderBlockMarkers(blocks, isHome) {
+  // Lettered markers, coloured by the zone's risk band under the selected
+  // model. The popup explains the score in plain words.
+  function renderBlockMarkers(blocks, isHome, scores, modelTitle) {
     blockMarkerLayer.clearLayers();
     blocks.forEach((b) => {
-      const icon = L.divIcon({ className: "", html: '<div class="block-marker"></div>', iconSize: [13, 13], iconAnchor: [6.5, 6.5] });
-      const popup = isHome
-        ? `<strong>Block ${b.id} · ${b.crop}</strong><br>NDVI ${b.ndvi} — ${b.note}`
-        : `<strong>Sample point ${b.id}</strong><br>Generic cropland assumption for this location — no specific crop identified here.`;
-      L.marker(b.pos, { icon, title: isHome ? `Block ${b.id} · ${b.crop}` : `Sample point ${b.id}` })
-        .bindPopup(popup)
+      const r = scores?.[b.id];
+      const bandClass = r ? ` band-${r.band}` : "";
+      const icon = L.divIcon({ className: "", html: `<div class="block-marker${bandClass}">${b.id}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+      const name = isHome ? `Block ${b.id} · ${b.crop}` : `Sample point ${b.id} · generic cropland`;
+      const body = r
+        ? `<span class="pop-score band-${r.band}">${modelTitle}: ${r.score}/100 · ${r.label}</span><br><strong>Why:</strong> ${r.reason}.` +
+          (isHome ? "" : "<br><em>No specific crop is known here — a generic cropland calendar is assumed.</em>")
+        : "Loading…";
+      L.marker(b.pos, { icon, title: name })
+        .bindPopup(`<strong>${name}</strong><br>${body}`, { maxWidth: 280 })
         .addTo(blockMarkerLayer);
     });
   }
@@ -320,8 +326,9 @@ cropFilters.forEach((btn) => {
       activeLocation = { lat: FARM.lat, lon: FARM.lon, name: FARM.name, isHome: true };
       activeBlocks = BLOCK_MARKERS;
       activeSuitBounds = SUIT_BOUNDS;
-      renderBlockMarkers(activeBlocks, true);
+      loadTerrain();
       refreshSuitability();
+      notifyStateChange();
     }
   });
 
@@ -383,7 +390,7 @@ cropFilters.forEach((btn) => {
   async function fetchPowerDailyFor(lat, lon) {
     const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
     if (locationPowerCache.has(key)) return locationPowerCache.get(key);
-    const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M_MAX,T2M,PRECTOTCORR,GWETROOT&community=AG&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&start=20230101&end=20241231&format=JSON`;
+    const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=T2M_MAX,T2M_MIN,T2M,PRECTOTCORR,GWETROOT&community=AG&latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&start=20230101&end=20241231&format=JSON`;
     const promise = fetch(url)
       .then((res) => {
         if (!res.ok) throw new Error(`POWER HTTP ${res.status}`);
@@ -419,18 +426,102 @@ cropFilters.forEach((btn) => {
     Cropland: { bare: [12, 1, 2], establishing: [3, 4], growing: [5, 6], peak: [7, 8], senescence: [9, 10, 11] },
   };
   const CROP_SENSITIVITY = {
-    Tomato: { heat: 0.9, drought: 0.7 },
-    Wheat: { heat: 0.5, drought: 0.5 },
-    Cotton: { heat: 0.4, drought: 0.3 },
-    Grapes: { heat: 0.6, drought: 0.4 },
-    Paddy: { heat: 0.5, drought: 1.0 }, // standing-water crop — very drought sensitive
-    Cropland: { heat: 0.6, drought: 0.6 },
+    Tomato: { heat: 0.9, drought: 0.7, frost: 1.0 },
+    Wheat: { heat: 0.5, drought: 0.5, frost: 0.3 },
+    Cotton: { heat: 0.4, drought: 0.3, frost: 0.9 },
+    Grapes: { heat: 0.6, drought: 0.4, frost: 0.6 },
+    Paddy: { heat: 0.5, drought: 1.0, frost: 1.0 }, // standing-water crop — very drought sensitive
+    Cropland: { heat: 0.6, drought: 0.6, frost: 0.7 },
   };
-  // Static physical terrain knowledge (not fabricated data): on the home
-  // farm, Block A sits on the steepest slope, A/E flank the real creek
-  // corridor. Not meaningful for a searched location, so it's skipped there.
-  const EROSION_TERRAIN_BIAS = { A: 15, B: 5, C: -5, D: -10, E: 0 };
-  const FLOOD_TERRAIN_BIAS = { A: 15, B: -10, C: -10, D: -10, E: 20 };
+
+  /* ---- Real terrain: a 10x10 elevation grid over the heatmap bounds
+     (Open-Meteo Elevation API, Copernicus DEM). Slope and relative low
+     spots shape the erosion, flood and frost zones, so the picture
+     follows the real land instead of hand-set per-block biases. ---- */
+  const TERRAIN_N = 10;
+  const terrainCache = new Map(); // bounds key -> Promise<terrain>
+  let activeTerrain = null;
+
+  function fetchTerrainFor(bounds) {
+    const [[south, west], [north, east]] = bounds;
+    const key = [south, west, north, east].map((v) => v.toFixed(3)).join(",");
+    if (terrainCache.has(key)) return terrainCache.get(key);
+    const lats = [];
+    const lons = [];
+    for (let r = 0; r < TERRAIN_N; r++) {
+      for (let c = 0; c < TERRAIN_N; c++) {
+        lats.push((north - ((north - south) * r) / (TERRAIN_N - 1)).toFixed(5));
+        lons.push((west + ((east - west) * c) / (TERRAIN_N - 1)).toFixed(5));
+      }
+    }
+    const promise = fetch(`https://api.open-meteo.com/v1/elevation?latitude=${lats.join(",")}&longitude=${lons.join(",")}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`elevation HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        const elev = data?.elevation;
+        if (!Array.isArray(elev) || elev.length !== TERRAIN_N * TERRAIN_N) throw new Error("Unexpected elevation payload");
+        const midLat = ((north + south) / 2) * (Math.PI / 180);
+        const dx = ((east - west) / (TERRAIN_N - 1)) * 111320 * Math.cos(midLat);
+        const dy = ((north - south) / (TERRAIN_N - 1)) * 110540;
+        const at = (r, c) => elev[Math.max(0, Math.min(TERRAIN_N - 1, r)) * TERRAIN_N + Math.max(0, Math.min(TERRAIN_N - 1, c))];
+        const min = Math.min(...elev);
+        const max = Math.max(...elev);
+        const slope = [];
+        const low = [];
+        for (let r = 0; r < TERRAIN_N; r++) {
+          for (let c = 0; c < TERRAIN_N; c++) {
+            const gx = (at(r, c + 1) - at(r, c - 1)) / (2 * dx);
+            const gy = (at(r + 1, c) - at(r - 1, c)) / (2 * dy);
+            slope.push(100 * Math.sqrt(gx * gx + gy * gy));
+            low.push(max - min >= 3 ? 1 - (at(r, c) - min) / (max - min) : 0.5);
+          }
+        }
+        // How steep each cell is compared with the rest of this area (0 flattest – 1 steepest)
+        const sMin = Math.min(...slope);
+        const sMax = Math.max(...slope);
+        const steep = slope.map((v) => (sMax - sMin >= 0.3 ? (v - sMin) / (sMax - sMin) : 0.5));
+        return { bounds, elev, slope, low, steep, min, max };
+      })
+      .catch((err) => {
+        terrainCache.delete(key);
+        throw err;
+      });
+    terrainCache.set(key, promise);
+    return promise;
+  }
+
+  // Bilinear lookup of elevation / slope % / relative lowness (0 high – 1 low)
+  // at a position fraction inside the terrain bounds.
+  function terrainAtFrac(terrain, fx, fy) {
+    if (!terrain) return null;
+    const x = Math.max(0, Math.min(1, fx)) * (TERRAIN_N - 1);
+    const y = Math.max(0, Math.min(1, fy)) * (TERRAIN_N - 1);
+    const c0 = Math.floor(x), r0 = Math.floor(y);
+    const c1 = Math.min(TERRAIN_N - 1, c0 + 1), r1 = Math.min(TERRAIN_N - 1, r0 + 1);
+    const tx = x - c0, ty = y - r0;
+    const lerp = (grid) =>
+      (grid[r0 * TERRAIN_N + c0] * (1 - tx) + grid[r0 * TERRAIN_N + c1] * tx) * (1 - ty) +
+      (grid[r1 * TERRAIN_N + c0] * (1 - tx) + grid[r1 * TERRAIN_N + c1] * tx) * ty;
+    return { elev: lerp(terrain.elev), slopePct: lerp(terrain.slope), low: lerp(terrain.low), steep: lerp(terrain.steep) };
+  }
+
+  // How much real terrain moves a zone's score for the selected model.
+  function terrainDelta(modelKey, t) {
+    if (!t) return 0;
+    if (modelKey === "erosion") return Math.min(25, t.slopePct * 3) + (t.steep - 0.5) * 12;
+    if (modelKey === "flood") return (t.low - 0.5) * 30;
+    if (modelKey === "frost") return (t.low - 0.5) * 16;
+    return 0;
+  }
+  function terrainNote(modelKey, t) {
+    if (!t) return "";
+    if (modelKey === "erosion") return `slope here is about ${t.slopePct.toFixed(1)}%${t.steep > 0.65 ? ", among the steepest ground in this area" : t.steep < 0.35 ? ", among the flattest ground in this area" : ""}`;
+    if (modelKey === "flood") return t.low > 0.65 ? "a low spot where water collects" : t.low < 0.35 ? "higher ground that drains well" : "mid-slope ground";
+    if (modelKey === "frost") return t.low > 0.65 ? "a low spot where cold air pools" : t.low < 0.35 ? "higher ground where cold air drains away" : "mid-slope ground";
+    return "";
+  }
 
   function cropPhase(crop, month) {
     const cal = CROP_CALENDAR[crop] || CROP_CALENDAR.Cropland;
@@ -477,9 +568,26 @@ cropFilters.forEach((btn) => {
       const vals = keys.map((k) => Number(series?.[k])).filter((v) => Number.isFinite(v) && v > -900);
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     };
+    // Share of days within a week of this calendar date, across the whole
+    // record, where the real minimum temperature reached 0 °C or below.
+    let frostChance = null;
+    if (dailySeries.T2M_MIN) {
+      let near = 0;
+      let frosty = 0;
+      for (const [key, raw] of Object.entries(dailySeries.T2M_MIN)) {
+        const v = Number(raw);
+        if (!Number.isFinite(v) || v <= -900) continue;
+        if (monthDayDistance(mm, dd, Number(key.slice(4, 6)), Number(key.slice(6, 8))) > 7) continue;
+        near += 1;
+        if (v <= 0) frosty += 1;
+      }
+      frostChance = near ? frosty / near : null;
+    }
     return {
       month: mm,
       tMax: avg(dailySeries.T2M_MAX),
+      tMin: avg(dailySeries.T2M_MIN),
+      frostChance,
       gwetroot: avg(dailySeries.GWETROOT),
       recentHeavyRain: recentHeavyRain(mm, dd, dailySeries),
       matchedDays: keys.length,
@@ -505,7 +613,12 @@ cropFilters.forEach((btn) => {
     flood: {
       title: "Flood Risk",
       color: [96, 165, 250],
-      desc: "Highest on the real low-lying creek corridor (Blocks A/E), rising further with real root-zone wetness and real heavy-rain events.",
+      desc: "Highest in real low spots where water collects, rising further with real root-zone wetness and real heavy-rain events.",
+    },
+    frost: {
+      title: "Frost Risk",
+      color: [56, 189, 248],
+      desc: "How often the real minimum temperature reached 0 °C around this date, scaled by how frost-tender each crop is. Low spots score higher because cold air pools there.",
     },
     stress: {
       title: "Crop Stress & Season",
@@ -555,11 +668,15 @@ cropFilters.forEach((btn) => {
   // (optionally scenario-adjusted) POWER sample and the crop calendar.
   // Terrain biases only apply on the home farm, where they're real
   // documented knowledge — meaningless for a generic searched point.
-  function computeBlockScore(modelKey, block, sample, isHome) {
+  const BAND_NAMES = ["very low", "low", "moderate", "high", "very high"];
+  const BAND_COLORS = [[46, 158, 91], [155, 208, 90], [245, 211, 63], [240, 138, 44], [217, 52, 43]];
+  const bandOf = (score) => (score < 20 ? 0 : score < 40 ? 1 : score < 60 ? 2 : score < 80 ? 3 : 4);
+
+  function computeBlockScore(modelKey, block, sample, isHome, terrainPoint) {
     const crop = block.crop;
     const phase = sample ? cropPhase(crop, sample.month) : null;
-    const sens = CROP_SENSITIVITY[crop] || { heat: 0.5, drought: 0.5 };
-    if (!sample) return { score: 30, phase: "—", label: "moderate", reason: "waiting for the real NASA POWER record to load" };
+    const sens = CROP_SENSITIVITY[crop] || { heat: 0.5, drought: 0.5, frost: 0.7 };
+    if (!sample) return { score: 30, base: 30, band: 1, phase: "—", label: "low", reason: "waiting for the real NASA POWER record to load" };
 
     const bare = phase === "bare";
     const activeGrowth = phase === "growing" || phase === "peak";
@@ -567,7 +684,6 @@ cropFilters.forEach((btn) => {
     let reason = "";
 
     if (modelKey === "erosion") {
-      if (isHome) score += EROSION_TERRAIN_BIAS[block.id] || 0;
       if (bare) { score += 35; reason = `${crop} is in its real bare-field window this month`; }
       if (sample.recentHeavyRain) { score += 25; reason += (reason ? "; " : "") + "a real >25mm rain event occurred around this date"; }
       if (!reason) reason = "live crop cover, no recent heavy rain";
@@ -586,11 +702,23 @@ cropFilters.forEach((btn) => {
         reason = "no real heavy-rain event around this date";
       }
     } else if (modelKey === "flood") {
-      if (isHome) score += FLOOD_TERRAIN_BIAS[block.id] || 0;
       const wet = sample.gwetroot != null ? Math.min(1, sample.gwetroot / 0.5) : 0;
       score += wet * 35;
       if (sample.recentHeavyRain) { score += 20; reason = "real heavy rain + real root-zone wetness"; }
-      else reason = isHome ? "based on terrain position + real root-zone wetness" : "based on real root-zone wetness (terrain not modeled away from the home farm)";
+      else reason = sample.gwetroot != null ? `real root-zone wetness ${sample.gwetroot.toFixed(2)}, no heavy rain around this date` : "root-zone wetness unavailable for this date";
+    } else if (modelKey === "frost") {
+      const fc = sample.frostChance;
+      if (fc == null) {
+        reason = "minimum-temperature record unavailable for this date";
+      } else if (bare) {
+        score = 8 + fc * 15;
+        reason = `${crop} field is bare this month — frost can't damage a crop that isn't growing`;
+      } else {
+        const cold = sample.tMin != null ? Math.max(0, 3 - sample.tMin) * 4 : 0;
+        score = 8 + (fc * 90 + cold) * sens.frost;
+        reason = `frost on ${Math.round(fc * 100)}% of days around this date in the 2023–24 record` +
+          (sample.tMin != null ? `, typical night low ${sample.tMin.toFixed(1)}°C` : "") + `, ${phase} phase`;
+      }
     } else if (modelKey === "stress") {
       if (bare) {
         score = 10; reason = `${crop} field is bare/dormant — no live crop under heat or water stress`;
@@ -603,40 +731,90 @@ cropFilters.forEach((btn) => {
       }
     }
 
-    score = Math.max(0, Math.min(100, Math.round(score)));
-    const label = score >= 66 ? "high" : score >= 35 ? "moderate" : "low";
-    return { score, phase, label, reason };
+    const base = Math.max(0, Math.min(100, score));
+    const tNote = terrainNote(modelKey, terrainPoint);
+    if (tNote) reason += `; ${tNote}`;
+    score = Math.max(0, Math.min(100, Math.round(base + terrainDelta(modelKey, terrainPoint))));
+    const band = bandOf(score);
+    return { score, base, band, phase, label: BAND_NAMES[band], reason };
   }
 
-  function paintSuitability(modelKey, sample, blocks, bounds, isHome) {
-    const meta = MODEL_META[modelKey];
+  // Paints a banded risk surface: every pixel blends the nearby blocks'
+  // scores (inverse-distance weighting) and then adds the real terrain
+  // effect at that exact spot. Five flat colour bands with a thin outline
+  // between them read far more clearly than soft glowing blobs.
+  function paintSuitability(modelKey, sample, blocks, bounds, isHome, terrain) {
+    const W = 400;
+    const H = 262;
     const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 420;
+    canvas.width = W;
+    canvas.height = H;
     const ctx = canvas.getContext("2d");
     const scores = {};
-    blocks.forEach((b) => {
-      const result = computeBlockScore(modelKey, b, sample, isHome);
-      scores[b.id] = result;
+    const pts = blocks.map((b) => {
       const { fx, fy } = fracFor(b.pos[0], b.pos[1], bounds);
-      const intensity = result.score / 100;
-      const radius = (0.15 + intensity * 0.2) * 640;
-      const [r, g, bch] = meta.color;
-      const grad = ctx.createRadialGradient(fx * 640, fy * 420, 6, fx * 640, fy * 420, radius);
-      grad.addColorStop(0, `rgba(${r},${g},${bch},${(0.25 + intensity * 0.65).toFixed(2)})`);
-      grad.addColorStop(0.6, `rgba(${r},${g},${bch},${(0.12 + intensity * 0.3).toFixed(2)})`);
-      grad.addColorStop(1, `rgba(${r},${g},${bch},0)`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 640, 420);
+      const result = computeBlockScore(modelKey, b, sample, isHome, terrainAtFrac(terrain, fx, fy));
+      scores[b.id] = result;
+      return { fx, fy, base: result.base, id: b.id };
     });
-    return { dataUrl: canvas.toDataURL("image/png"), scores };
+
+    const scoreAtFrac = (fx, fy) => {
+      let num = 0;
+      let den = 0;
+      for (const p of pts) {
+        const dx = (fx - p.fx) * (W / H);
+        const dy = fy - p.fy;
+        const w = 1 / Math.pow(dx * dx + dy * dy + 0.0004, 1.4);
+        num += w * p.base;
+        den += w;
+      }
+      const base = den ? num / den : 30;
+      return Math.max(0, Math.min(100, base + terrainDelta(modelKey, terrainAtFrac(terrain, fx, fy))));
+    };
+
+    const bands = new Uint8Array(W * H);
+    const vals = new Float32Array(W * H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const v = scoreAtFrac((x + 0.5) / W, (y + 0.5) / H);
+        vals[y * W + x] = v;
+        bands[y * W + x] = bandOf(v);
+      }
+    }
+    // Smooth shading between the band colours (centred on 10/30/50/70/90)
+    // so gentle terrain variation is visible inside a band too.
+    const shade = (v) => {
+      const t = Math.max(0, Math.min(4, (v - 10) / 20));
+      const i0 = Math.floor(t);
+      const i1 = Math.min(4, i0 + 1);
+      const f = t - i0;
+      return BAND_COLORS[i0].map((c, k) => Math.round(c + (BAND_COLORS[i1][k] - c) * f));
+    };
+    const img = ctx.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const b = bands[i];
+        const edge = (x + 1 < W && bands[i + 1] !== b) || (y + 1 < H && bands[i + W] !== b);
+        const [r, g, bl] = shade(vals[i]);
+        // Feather the outer 5% so the overlay doesn't end in a hard rectangle
+        const m = Math.min(x / W, 1 - x / W, y / H, 1 - y / H) / 0.05;
+        const feather = Math.max(0, Math.min(1, m));
+        const o = i * 4;
+        img.data[o] = edge ? 20 : r;
+        img.data[o + 1] = edge ? 40 : g;
+        img.data[o + 2] = edge ? 30 : bl;
+        img.data[o + 3] = Math.round((edge ? 150 : 165) * feather);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return { dataUrl: canvas.toDataURL("image/png"), scores, scoreAtFrac };
   }
 
   const suitabilityToggle = $("#suitabilityToggle");
   const modelSelect = $("#modelSelect");
   const modelNote = $("#modelNote");
   const fieldIntel = $("#fieldIntel");
-  const legendBar = $("#legendBar");
   const seasonScrub = $("#seasonScrub");
   const seasonScrubValue = $("#seasonScrubValue");
   const scenarioRain = $("#scenarioRain");
@@ -650,13 +828,9 @@ cropFilters.forEach((btn) => {
     const meta = MODEL_META[modelKey];
     fieldIntel.innerHTML = blocks.map((b) => {
       const r = scores[b.id];
-      const label = isHome ? b.id : `${b.id}`;
       const cropLabel = isHome ? b.crop : "sample point";
-      return `<li title="${r.reason.replace(/"/g, "&quot;")}"><span class="fi-block">${label}</span><span class="fi-crop">${cropLabel} · ${r.phase}</span><span class="fi-risk ${r.label}">${r.label}</span></li>`;
+      return `<li><span class="fi-block">${b.id}</span><span class="fi-crop">${cropLabel} · ${r.phase}<small>${r.reason}</small></span><span class="fi-risk band-${r.band}">${r.label} · ${r.score}</span></li>`;
     }).join("");
-
-    const [r, g, bch] = meta.color;
-    if (legendBar) legendBar.style.background = `linear-gradient(to right, rgba(${r},${g},${bch},0.12), rgba(${r},${g},${bch},0.9))`;
 
     const dateLabel = new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, { month: "long", day: "numeric" });
     const rainPct = Number(scenarioRain?.value || 0);
@@ -697,18 +871,134 @@ cropFilters.forEach((btn) => {
       };
     }
 
-    const { dataUrl, scores } = paintSuitability(modelKey, sample, activeBlocks, activeSuitBounds, activeLocation.isHome);
+    const terrain = activeTerrain && activeTerrain.bounds === activeSuitBounds ? activeTerrain : null;
+    const { dataUrl, scores, scoreAtFrac } = paintSuitability(modelKey, sample, activeBlocks, activeSuitBounds, activeLocation.isHome, terrain);
     renderFieldIntel(modelKey, scores, sample, dateStr, activeBlocks, activeLocation.isHome);
+    renderBlockMarkers(activeBlocks, activeLocation.isHome, scores, MODEL_META[modelKey].title);
+    mapLegend.update(MODEL_META[modelKey].title);
 
     if (suitOverlay) {
       map.removeLayer(suitOverlay);
       suitOverlay = null;
     }
     if (suitabilityToggle.checked) {
-      suitOverlay = L.imageOverlay(dataUrl, activeSuitBounds, { opacity: 0.8 });
+      suitOverlay = L.imageOverlay(dataUrl, activeSuitBounds, { opacity: 0.85 });
       suitOverlay.addTo(map);
     }
+
+    // Kept for click-to-explain on the map and for Ask Agro's context.
+    lastSurface = { modelKey, sample, scores, scoreAtFrac, terrain, bounds: activeSuitBounds };
+    lastHeatmapContext = {
+      model: MODEL_META[modelKey].title,
+      what_it_shows: MODEL_META[modelKey].desc,
+      date: dateStr,
+      heatmap_visible: suitabilityToggle.checked,
+      colour_key: "green = very low (0-19), light green = low (20-39), yellow = moderate (40-59), orange = high (60-79), red = very high (80-100)",
+      data_basis: sample
+        ? "NASA POWER daily record 2023-2024 for this time of year + crop growth calendar (assumption) + real terrain grid"
+        : "NASA POWER record not loaded yet - scores are placeholders",
+      typical_conditions_for_date: sample
+        ? {
+            max_temp_c: sample.tMax != null ? Number(sample.tMax.toFixed(1)) : null,
+            min_temp_c: sample.tMin != null ? Number(sample.tMin.toFixed(1)) : null,
+            frost_chance_pct: sample.frostChance != null ? Math.round(sample.frostChance * 100) : null,
+            root_zone_wetness_0_to_1: sample.gwetroot != null ? Number(sample.gwetroot.toFixed(2)) : null,
+            heavy_rain_over_25mm_near_this_date: sample.recentHeavyRain,
+          }
+        : null,
+      terrain: terrain ? `real elevation grid loaded, ${Math.round(terrain.min)}-${Math.round(terrain.max)} m` : "terrain grid not loaded",
+      what_if_scenario: rainPct !== 0 || tempDelta !== 0 ? { rainfall_change_pct: rainPct, temperature_change_c: tempDelta } : "none (real baseline)",
+      zones: activeBlocks.map((b) => ({
+        id: b.id,
+        crop: activeLocation.isHome ? b.crop : "generic cropland (crop unknown)",
+        growth_phase: scores[b.id].phase,
+        score: scores[b.id].score,
+        band: scores[b.id].label,
+        why: scores[b.id].reason,
+      })),
+    };
   }
+
+  let lastSurface = null;
+  let lastHeatmapContext = null;
+
+  // On-map colour key, so the heatmap can be read without scrolling.
+  const mapLegend = L.control({ position: "bottomleft" });
+  mapLegend.onAdd = function () {
+    this._div = L.DomUtil.create("div", "map-legend");
+    L.DomEvent.disableClickPropagation(this._div);
+    return this._div;
+  };
+  mapLegend.update = function (title) {
+    if (!this._div) return;
+    this._div.innerHTML =
+      `<strong>${title}</strong>` +
+      BAND_NAMES.map((n, i) => `<span><i class="rl-sw b${i}"></i>${n}</span>`).join("") +
+      "<em>Click a zone to see why</em>";
+    this._div.style.display = suitabilityToggle.checked ? "" : "none";
+  };
+  mapLegend.addTo(map);
+
+  // Click anywhere inside the heatmap to see that spot's score and reason.
+  map.on("click", (e) => {
+    if (!lastSurface || !suitabilityToggle.checked) return;
+    const [[south, west], [north, east]] = lastSurface.bounds;
+    const { lat, lng } = e.latlng;
+    if (lat < south || lat > north || lng < west || lng > east) return;
+    const { fx, fy } = fracFor(lat, lng, lastSurface.bounds);
+    const score = Math.round(lastSurface.scoreAtFrac(fx, fy));
+    const band = bandOf(score);
+    let nearest = activeBlocks[0];
+    let best = Infinity;
+    activeBlocks.forEach((b) => {
+      const d = (b.pos[0] - lat) ** 2 + (b.pos[1] - lng) ** 2;
+      if (d < best) { best = d; nearest = b; }
+    });
+    const near = lastSurface.scores[nearest.id];
+    const t = terrainAtFrac(lastSurface.terrain, fx, fy);
+    const tNote = terrainNote(lastSurface.modelKey, t);
+    const terrainLine = t
+      ? `<br><strong>Terrain here:</strong> ${Math.round(t.elev)} m${tNote ? `, ${tNote}` : ""}.`
+      : "";
+    L.popup({ maxWidth: 280 })
+      .setLatLng(e.latlng)
+      .setContent(
+        `<span class="pop-score band-${band}">${MODEL_META[lastSurface.modelKey].title}: ${score}/100 · ${BAND_NAMES[band]}</span>` +
+        `<br><strong>Why:</strong> closest to ${activeLocation.isHome ? "Block" : "sample point"} ${nearest.id} — ${near.reason.split("; ")[0]}.` +
+        terrainLine +
+        "<br><em>A model estimate, not a measurement of this exact spot.</em>"
+      )
+      .openOn(map);
+  });
+
+  // Loads the real elevation grid for whatever bounds are active, then repaints.
+  function loadTerrain() {
+    const bounds = activeSuitBounds;
+    activeTerrain = null;
+    fetchTerrainFor(bounds)
+      .then((terrain) => {
+        if (activeSuitBounds !== bounds) return; // superseded by a newer search
+        activeTerrain = terrain;
+        refreshSuitability();
+      })
+      .catch((err) => console.warn("Terrain grid unavailable — heatmap drawn without it", err));
+  }
+
+  // Bridge for planner.js (crop search + rotation planner) and Ask Agro.
+  const stateListeners = [];
+  function notifyStateChange() {
+    stateListeners.forEach((cb) => {
+      try { cb(); } catch (err) { console.error(err); }
+    });
+  }
+  window.AgroState = {
+    apiBase: "https://agrointel-ai-api.vercel.app",
+    getLocation: () => ({ ...activeLocation }),
+    getDaily: () => (activeLocation.isHome ? powerDaily : activeLocationPower),
+    getDate: () => dateInput.value || "2025-07-15",
+    getHeatmapContext: () => lastHeatmapContext,
+    onChange: (cb) => stateListeners.push(cb),
+  };
   suitabilityToggle.addEventListener("change", refreshSuitability);
   modelSelect.addEventListener("change", refreshSuitability);
 
@@ -722,8 +1012,10 @@ cropFilters.forEach((btn) => {
     activeBlocks = genericBlocksFor(bounds);
     activeLocationPower = null;
     activeLocationPowerFailed = false;
-    renderBlockMarkers(activeBlocks, false);
+    map.flyToBounds(bounds, { duration: 1, padding: [10, 10] }); // zoom so the heatmap fills the map
+    loadTerrain();
     refreshSuitability(); // shows a "loading" state immediately
+    notifyStateChange();
 
     try {
       const series = await fetchPowerDailyFor(lat, lon);
@@ -735,6 +1027,7 @@ cropFilters.forEach((btn) => {
       activeLocationPowerFailed = true;
     }
     refreshSuitability();
+    notifyStateChange();
   }
 
   /* Season-scrub slider: moves the real date input across a full year
@@ -767,6 +1060,7 @@ cropFilters.forEach((btn) => {
   });
 
   refreshSuitability();
+  loadTerrain();
 
   /* ---- NASA POWER: 2023–2024 daily data → SVG charts + takeaways ---- */
   const POWER_URL =
@@ -998,6 +1292,7 @@ cropFilters.forEach((btn) => {
 
       powerDaily = params; // keep the real daily series so the heatmap can use it too
       refreshSuitability(); // re-render now that real data is in (initial call ran before this)
+      notifyStateChange();
 
       powerStatus.textContent = "Live from NASA POWER — 731 days · 42.02°N, 93.55°W (central Iowa) · updated for 2023–2024.";
       powerStatus.className = "power-status ok";
@@ -1036,7 +1331,7 @@ cropFilters.forEach((btn) => {
   const askStatusText = $("#askStatusText");
 
   const WELCOME_MSG =
-    "Hi! I'm Ask Agro, grounded in real NASA data for whatever place is on the map. Ask about irrigation, risk, or soil - or just say hi. I can move the map too: try “go to Kenya” or “show NDVI”.";
+    "Hi! I'm Ask Agro, your AI agronomist. I can see the heatmap, date and place on the map, plus its NASA climate record. Ask me to explain the heatmap, what to plant this month, or which rotation fits \u2014 or just say hi. I can move the map too: try \u201cgo to Kenya\u201d or \u201cshow frost risk\u201d.";
 
   const escapeHtml = (s) =>
     String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1076,6 +1371,7 @@ cropFilters.forEach((btn) => {
   // Real indicators for any lat/lon, cached per rounded location so asking
   // several questions about the same place doesn't re-fetch every time.
   const askIndicatorsCache = new Map();
+  window.AgroState.getIndicators = (lat, lon) => getAskIndicators(lat, lon);
   function getAskIndicators(lat, lon) {
     const key = `${lat.toFixed(3)},${lon.toFixed(3)}`;
     if (!askIndicatorsCache.has(key)) {
@@ -1097,6 +1393,19 @@ cropFilters.forEach((btn) => {
     return askIndicatorsCache.get(key);
   }
 
+  // What the farmer is looking at right now, sent with every question so
+  // the AI can explain this exact heatmap and give planting advice from
+  // the real climate record rather than generic answers.
+  const askHistory = [];
+  function buildAskPageContext() {
+    const parts = [];
+    const heat = window.AgroState?.getHeatmapContext?.();
+    if (heat) parts.push("HEATMAP CURRENTLY ON THE MAP:\n" + JSON.stringify(heat, null, 1));
+    const planner = window.AgroPlanner?.getAiContext?.();
+    if (planner) parts.push(planner);
+    return parts.join("\n\n").slice(0, 9000);
+  }
+
   async function askAgrointel(question) {
     const typing = showAskTyping();
     askInput.disabled = true;
@@ -1104,12 +1413,6 @@ cropFilters.forEach((btn) => {
     try {
       const loc = activeLocation; // real current map focus, set by the Suitability code above
       const indicators = await getAskIndicators(loc.lat, loc.lon);
-      const scoreRes = await fetch(`${AGROINTEL_API_BASE}/score`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ indicators }),
-      });
-      const scoreData = scoreRes.ok ? await scoreRes.json() : { comparisons: [] };
       const chatRes = await fetch(`${AGROINTEL_API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1117,13 +1420,16 @@ cropFilters.forEach((btn) => {
           question,
           location_label: loc.name || "GreenHarvest North, Central Iowa",
           indicators,
+          page_context: buildAskPageContext(),
+          history: askHistory.slice(-8),
         }),
       });
       if (!chatRes.ok) throw new Error(`chat HTTP ${chatRes.status}`);
       const data = await chatRes.json();
       typing.remove();
-      appendAskMsg(formatBot(data.answer || "No answer returned."), "bot");
-      void scoreData; // fetched so /chat's own scoring call (server-side) has a warm cache path too
+      const answer = data.answer || "No answer returned.";
+      appendAskMsg(formatBot(answer), "bot");
+      askHistory.push({ role: "user", text: question.slice(0, 600) }, { role: "assistant", text: answer.slice(0, 1200) });
     } catch (err) {
       typing.remove();
       console.error("Ask Agro error:", err);
@@ -1210,6 +1516,8 @@ cropFilters.forEach((btn) => {
     flood: "flood",
     "crop stress": "stress",
     season: "stress",
+    frost: "frost",
+    freez: "frost",
   };
   function setAskModel(lower) {
     const key = Object.keys(ASK_MODEL_KEYWORDS).find((k) => lower.includes(k));
@@ -1286,6 +1594,7 @@ cropFilters.forEach((btn) => {
   });
 
   askClearBtn?.addEventListener("click", () => {
+    askHistory.length = 0;
     askMessages.innerHTML = "";
     appendAskMsg(WELCOME_MSG, "bot");
     showToast("Conversation cleared.");
