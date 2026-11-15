@@ -328,6 +328,7 @@ cropFilters.forEach((btn) => {
       activeSuitBounds = SUIT_BOUNDS;
       loadTerrain();
       refreshSuitability();
+      if (powerDaily) renderClimate(powerDaily, activeLocation);
       notifyStateChange();
     }
   });
@@ -1021,10 +1022,12 @@ cropFilters.forEach((btn) => {
       const series = await fetchPowerDailyFor(lat, lon);
       if (activeLocation.lat !== lat || activeLocation.lon !== lon) return; // superseded by a newer search
       activeLocationPower = series;
+      renderClimate(series, activeLocation);
     } catch (err) {
       console.error("POWER fetch failed for searched location", lat, lon, err);
       if (activeLocation.lat !== lat || activeLocation.lon !== lon) return;
       activeLocationPowerFailed = true;
+      setClimateError(activeLocation);
     }
     refreshSuitability();
     notifyStateChange();
@@ -1271,38 +1274,61 @@ cropFilters.forEach((btn) => {
       `Rain ${p2023.toFixed(0)} → ${p2024.toFixed(0)} mm/yr · peak ${peak.toFixed(1)} °C (${peakDate}) · GWETROOT ${gMean.toFixed(2)} mean`;
   }
 
+  const fmtCoord = (v, pos, neg) => `${Math.abs(v).toFixed(2)}°${v >= 0 ? pos : neg}`;
+  function climatePlaceName(loc) {
+    if (loc.isHome) return "the central Iowa sample farm";
+    const n = String(loc.name || "this place");
+    return n.length > 70 ? n.slice(0, 67) + "…" : n;
+  }
+  // Draws both charts + takeaways + status line for whichever place is active.
+  function renderClimate(params, loc) {
+    renderPrecipChart(monthlyBuckets(params.PRECTOTCORR));
+    renderTempChart(monthlyBuckets(params.T2M_MAX), monthlyBuckets(params.T2M), monthlyBuckets(params.T2M_MIN));
+    computeTakeaways({ properties: { parameter: params } });
+    const place = climatePlaceName(loc);
+    const cp = $("#climatePlace");
+    if (cp) cp.textContent = place;
+    powerStatus.textContent = `Live from NASA POWER — 731 days · ${fmtCoord(loc.lat, "N", "S")}, ${fmtCoord(loc.lon, "E", "W")} · ${place} · 2023–2024.`;
+    powerStatus.className = "power-status ok";
+    loadLabel.textContent = "Reload NASA POWER data";
+  }
+  function setClimateError(loc) {
+    powerStatus.textContent = `Couldn’t reach NASA POWER for ${climatePlaceName(loc)} — check your connection and retry.`;
+    powerStatus.className = "power-status error";
+    loadLabel.textContent = "Retry loading NASA POWER data";
+  }
+
   async function loadPowerData(silent = false) {
     loadBtn.disabled = true;
     loadLabel.textContent = "Fetching NASA POWER…";
-    powerStatus.textContent = "Requesting daily data for 42.02°N, 93.55°W…";
+    const loc = { ...activeLocation };
+    powerStatus.textContent = `Requesting daily data for ${fmtCoord(loc.lat, "N", "S")}, ${fmtCoord(loc.lon, "E", "W")}…`;
     powerStatus.className = "power-status";
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     try {
-      const res = await fetch(POWER_URL, { signal: controller.signal });
-      if (!res.ok) throw new Error(`POWER HTTP ${res.status}`);
-      const data = await res.json();
-      const params = data?.properties?.parameter;
-      if (!params?.T2M) throw new Error("Unexpected POWER payload");
-
-      renderPrecipChart(monthlyBuckets(params.PRECTOTCORR));
-      renderTempChart(monthlyBuckets(params.T2M_MAX), monthlyBuckets(params.T2M), monthlyBuckets(params.T2M_MIN));
-      computeTakeaways(data);
-
-      powerDaily = params; // keep the real daily series so the heatmap can use it too
-      refreshSuitability(); // re-render now that real data is in (initial call ran before this)
-      notifyStateChange();
-
-      powerStatus.textContent = "Live from NASA POWER — 731 days · 42.02°N, 93.55°W (central Iowa) · updated for 2023–2024.";
-      powerStatus.className = "power-status ok";
-      loadLabel.textContent = "Reload NASA POWER data";
+      let params;
+      if (loc.isHome) {
+        const res = await fetch(POWER_URL, { signal: controller.signal });
+        if (!res.ok) throw new Error(`POWER HTTP ${res.status}`);
+        const data = await res.json();
+        params = data?.properties?.parameter;
+        if (!params?.T2M) throw new Error("Unexpected POWER payload");
+      } else {
+        params = await fetchPowerDailyFor(loc.lat, loc.lon);
+      }
+      if (activeLocation.lat !== loc.lat || activeLocation.lon !== loc.lon) return; // user moved on
+      renderClimate(params, loc);
+      if (loc.isHome) {
+        powerDaily = params; // keep the real daily series so the heatmap can use it too
+        refreshSuitability(); // re-render now that real data is in (initial call ran before this)
+        notifyStateChange();
+      }
       if (!silent) showToast("NASA POWER data loaded.");
     } catch (err) {
       console.error("POWER load failed:", err);
-      powerStatus.textContent = "Couldn’t reach NASA POWER — check your connection and retry.";
-      powerStatus.className = "power-status error";
-      loadLabel.textContent = "Retry loading NASA POWER data";
+      setClimateError(loc);
       const ctxS = $("#ctxPowerStatus");
       if (ctxS) ctxS.innerHTML = '<span class="ctx-dot error"></span>unreachable';
       if (!silent) showToast("NASA POWER request failed.");

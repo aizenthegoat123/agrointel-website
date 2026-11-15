@@ -1059,9 +1059,15 @@ body {
 
 .analysis-grid {
   display: grid;
-  grid-template-columns: 1.65fr 1fr;
+  grid-template-columns: minmax(250px, 0.8fr) 1.5fr 1fr;
   gap: 1.25rem;
   align-items: stretch;
+}
+.analysis-grid > .suitability-panel { max-height: 680px; overflow-y: auto; }
+@media (max-width: 1280px) and (min-width: 1061px) {
+  /* narrower laptops: map + chat on top, suitability panel full-width below */
+  .analysis-grid { grid-template-columns: 1.65fr 1fr; }
+  .analysis-grid > .suitability-panel { order: 3; grid-column: 1 / -1; max-height: none; }
 }
 .map-card {
   background: var(--surface);
@@ -1108,8 +1114,6 @@ body {
   box-shadow: 0 0 0 2px rgba(20, 83, 45, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
-.suitability-block { margin-top: 1.25rem; }
-.suitability-block .suitability-panel { max-width: 640px; margin: 0 auto; }
 
 .suitability-panel {
   background: var(--surface);
@@ -1634,7 +1638,7 @@ body {
 }
 .footer-grid {
   display: grid;
-  grid-template-columns: 1.6fr repeat(3, 1fr);
+  grid-template-columns: 1fr;
   gap: 2.5rem;
   padding-bottom: 2rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -1642,7 +1646,7 @@ body {
 .footer-brand p {
   margin: 0.8rem 0 1rem;
   font-size: 0.9rem;
-  max-width: 19rem;
+  max-width: 34rem;
   line-height: 1.6;
 }
 .social-row { display: flex; gap: 0.6rem; }
@@ -2106,6 +2110,7 @@ body {
   .feature-grid, .steps, .quote-grid { grid-template-columns: repeat(2, 1fr); }
   .crop-grid { grid-template-columns: repeat(4, 1fr); }
   .analysis-grid { grid-template-columns: 1fr; }
+  .analysis-grid > .suitability-panel { order: 3; grid-column: auto; max-height: none; }
   #nasaMap { height: 430px; }
   .charts-grid { grid-template-columns: 1fr; }
   .fc-1 { left: -0.5rem; }
