@@ -1059,11 +1059,16 @@ body {
 
 .analysis-grid {
   display: grid;
-  grid-template-columns: minmax(250px, 0.8fr) 1.5fr 1fr;
+  grid-template-columns: minmax(300px, 0.9fr) 1.75fr 1.15fr;
   gap: 1.25rem;
   align-items: stretch;
 }
-.analysis-grid > .suitability-panel { max-height: 680px; overflow-y: auto; }
+.container-wide { max-width: 1680px; padding-inline: 1.5rem; }
+.analysis-grid > .suitability-panel { max-height: 740px; overflow-y: auto; }
+@media (min-width: 1281px) {
+  /* three columns: chat stretches to the same height as the map card */
+  .analysis-grid > .ask-chat { min-height: 0; max-height: none; }
+}
 @media (max-width: 1280px) and (min-width: 1061px) {
   /* narrower laptops: map + chat on top, suitability panel full-width below */
   .analysis-grid { grid-template-columns: 1.65fr 1fr; }
@@ -1082,7 +1087,7 @@ body {
 }
 #nasaMap {
   width: 100%;
-  height: 520px;
+  height: 680px;
   border-radius: 12px;
   border: 1px solid #d5dcc9;
   background: #dfe7d2;
@@ -1956,8 +1961,8 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  min-height: 560px;
-  max-height: 560px; /* fixed card height - messages scroll inside it, the card itself never grows */
+  min-height: 680px;
+  max-height: 680px; /* fixed card height - messages scroll inside it, the card itself never grows */
 }
 .ask-chat-header { background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
 .model-badge {
